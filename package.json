@@ -1,14 +1,16 @@
 {
-  "name": "Spectra",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "spectra",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Modern zero-configuration API documentation platform.",
+  "license": "MIT",
+  "packageManager": "pnpm@11.11.0",
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
@@ -16,7 +18,6 @@
       "onFail": "download"
     }
   },
-  "type": "module",
   "devDependencies": {
     "turbo": "^2.10.4"
   }
