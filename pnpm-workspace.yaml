@@ -1,6 +1,9 @@
 packages:
   - "apps/*"
   - "packages/*"
+
 allowBuilds:
-  sharp: true
-  unrs-resolver: true
+  '0': sharp
+  '1': unrs-resolver
+  sharp: set this to true or false
+  unrs-resolver: set this to true or false
