@@ -7,7 +7,12 @@
   "packageManager": "pnpm@11.11.0",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "turbo run dev",
+    "dev:studio": "pnpm --filter studio dev",
+    "dev:docs": "pnpm --filter docs dev",
+    "dev:api": "pnpm --filter example-api dev",
+    "build": "turbo run build",
+    "test": "turbo run test"
   },
   "keywords": [],
   "author": "",
