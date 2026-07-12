@@ -1,6 +1,8 @@
 import type { BaseNode } from "../common/BaseNode";
+import { NamedCollection } from "../types/NamedCollection";
 import type { Components } from "./Components";
 import type { Info } from "./Info";
+import { Path } from "./path/Path";
 import type { Server } from "./Server";
 import type { Tag } from "./Tag";
 
@@ -13,5 +15,5 @@ export interface Documentation extends BaseNode {
 
   readonly components: Components;
 
-  readonly endpoints: readonly unknown[];
+  readonly paths: NamedCollection<Path>;
 }
