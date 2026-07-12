@@ -1,5 +1,8 @@
+import { NamedCollection } from "../types/NamedCollection";
+import type { Schema } from "./schema/Schema";
+
 export interface Components {
-  readonly schemas: Record<string, unknown>;
+  readonly schemas: NamedCollection<Schema>;
 
   readonly responses: Record<string, unknown>;
 
