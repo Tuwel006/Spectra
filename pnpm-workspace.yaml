@@ -3,7 +3,5 @@ packages:
   - "packages/*"
 
 allowBuilds:
-  '0': sharp
-  '1': unrs-resolver
-  sharp: set this to true or false
-  unrs-resolver: set this to true or false
+  sharp: true
+  unrs-resolver: true

@@ -1,3 +1,1 @@
-export const core = () => {
-  return "Hello from core";
-};
+export * from './constants/index.js';
