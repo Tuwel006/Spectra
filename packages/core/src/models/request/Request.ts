@@ -4,9 +4,14 @@ import type { RequestBody } from "./RequestBody";
 
 export interface Request {
   /**
-   * Path + Query Parameters
+   * Path Parameters
    */
-  readonly parameters: readonly Parameter[];
+  readonly pathParameters: readonly Parameter[];
+
+  /**
+   * Query Parameters
+   */
+  readonly queryParameters: readonly Parameter[];
 
   /**
    * HTTP Headers
