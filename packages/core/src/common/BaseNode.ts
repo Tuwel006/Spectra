@@ -1,8 +1,9 @@
+import { Identifier } from "../types/Identifier";
 import type { Extensions } from "./Extension";
 import type { Metadata } from "./Metadata";
 
 export interface BaseNode {
-  readonly id: string;
+  readonly id: Identifier;
 
   readonly name?: string;
 
