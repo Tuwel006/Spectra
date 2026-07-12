@@ -1,6 +1,11 @@
-export * from './constants/index.js';
-export * from "./constants/HttpMethod.js";
+export * from "./constants/HttpMethod";
 
-export * from "./common/BaseNode.js";
-export * from "./common/Metadata.js";
-export * from "./common/Extension.js";
+export * from "./common/BaseNode";
+export * from "./common/Extension";
+export * from "./common/Metadata";
+
+export * from "./models/Documentation";
+export * from "./models/Info";
+export * from "./models/Server";
+export * from "./models/Tag";
+export * from "./models/Components";
