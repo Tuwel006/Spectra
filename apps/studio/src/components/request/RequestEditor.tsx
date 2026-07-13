@@ -22,6 +22,7 @@ import { QueryParamsTable } from "./QueryParamsTable";
 import { HeadersTable } from "./HeadersTable";
 import { CookiesTable } from "./CookiesTable";
 import { ExamplesPanel } from "./ExamplesPanel";
+import { ResponseViewer } from "@/components/response";
 
 import {
   collectParamHints,
@@ -100,16 +101,20 @@ export function RequestEditor({
       </div>
 
       <div className="flex-1 overflow-hidden">
-        <ScrollArea className="h-full" orientation="vertical">
-          {tab === "overview" ? <RequestOverview operation={operation} /> : null}
-          {tab === "auth" ? <AuthorizationPanel endpointId={endpointId} /> : null}
-          {tab === "path" ? <PathParamsTable endpointId={endpointId} /> : null}
-          {tab === "query" ? <QueryParamsTable endpointId={endpointId} /> : null}
-          {tab === "headers" ? <HeadersTable endpointId={endpointId} /> : null}
-          {tab === "cookies" ? <CookiesTable endpointId={endpointId} /> : null}
-          {tab === "body" ? <RequestBody endpointId={endpointId} /> : null}
-          {tab === "examples" ? <ExamplesPanel operation={operation} /> : null}
-        </ScrollArea>
+        {tab === "response" ? (
+          <ResponseViewer operation={operation} />
+        ) : (
+          <ScrollArea className="h-full" orientation="vertical">
+            {tab === "overview" ? <RequestOverview operation={operation} /> : null}
+            {tab === "auth" ? <AuthorizationPanel endpointId={endpointId} /> : null}
+            {tab === "path" ? <PathParamsTable endpointId={endpointId} /> : null}
+            {tab === "query" ? <QueryParamsTable endpointId={endpointId} /> : null}
+            {tab === "headers" ? <HeadersTable endpointId={endpointId} /> : null}
+            {tab === "cookies" ? <CookiesTable endpointId={endpointId} /> : null}
+            {tab === "body" ? <RequestBody endpointId={endpointId} /> : null}
+            {tab === "examples" ? <ExamplesPanel operation={operation} /> : null}
+          </ScrollArea>
+        )}
       </div>
     </div>
   );

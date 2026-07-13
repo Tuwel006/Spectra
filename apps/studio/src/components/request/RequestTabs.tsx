@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import {
+  ArrowDownToLine,
   Code2,
   Cookie,
   FileText,
@@ -24,7 +25,8 @@ export type RequestTabId =
   | "headers"
   | "cookies"
   | "body"
-  | "examples";
+  | "examples"
+  | "response";
 
 /**
  * Strip of tabs that switches between the request-editor sub-panels
@@ -121,6 +123,15 @@ export function RequestTabs({
             </TabLabel>
           ),
           disabled: disabled?.examples,
+        },
+        {
+          id: "response",
+          label: (
+            <TabLabel icon={<ArrowDownToLine className="h-3.5 w-3.5" />}>
+              Response
+            </TabLabel>
+          ),
+          disabled: disabled?.response,
         },
       ]}
       value={value}

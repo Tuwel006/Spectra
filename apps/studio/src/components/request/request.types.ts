@@ -190,20 +190,26 @@ export function collectParamHints(
   readonly produces: readonly string[];
   readonly contentType: string | undefined;
 } {
-  const toHint = (id: string, name?: string, desc?: string, schemaId?: string): ParamHint => ({
+  const toHint = (
+    id: string,
+    name?: string,
+    desc?: string,
+    schemaId?: string,
+    required = false,
+  ): ParamHint => ({
     id,
     name: name ?? id,
     type: schemaId ?? "string",
-    required: false,
+    required,
     description: desc,
   });
 
   return {
     pathParams: op.request.pathParameters.map((p) =>
-      toHint(p.id, p.name, p.description, p.schemaId),
+      toHint(p.id, p.name, p.description, p.schemaId, p.required),
     ),
     queryParams: op.request.queryParameters.map((p) =>
-      toHint(p.id, p.name, p.description, p.schemaId),
+      toHint(p.id, p.name, p.description, p.schemaId, p.required),
     ),
     headers: op.request.headers.map((h) => ({
       id: h.id,
