@@ -2,8 +2,7 @@
 
 import * as React from "react";
 
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { cn } from "@/lib/cn";
+import { RequestEditor } from "@/components/request";
 
 import {
   EndpointHeader,
@@ -23,8 +22,9 @@ import type { EndpointTabItem } from "./workspace.types";
  *   • Pull the active tab + its resolved `Operation` from the store.
  *   • Pass plain props to {@link EndpointHeader} so the header can stay
  *     free of `@spectra/core` types and rerender cheaply.
- *   • The big request / response area is left as a styled placeholder;
- *     the next phase fills it in.
+ *   • Hand the resolved `Operation` to {@link RequestEditor} for the
+ *     big request / response area. Phase 5 ships the editor UI; the
+ *     response viewer lands in a later phase.
  */
 export function WorkspaceContent(): React.ReactElement {
   const tabs = useEndpointTabs((s) => s.tabs);
@@ -37,13 +37,13 @@ export function WorkspaceContent(): React.ReactElement {
   // First paint before mount — render the same static placeholder as
   // SSR to keep hydration identical.
   if (!mounted) {
-    return <PlaceholderBody />;
+    return <RequestEditorSkeleton />;
   }
 
   if (!tab || !op) {
     // Tab metadata is intact but the operation can't be resolved (e.g.
-    // stale storage). Render a placeholder body instead of crashing.
-    return <PlaceholderBody />;
+    // stale storage). Render a skeleton instead of crashing.
+    return <RequestEditorSkeleton />;
   }
 
   const meta = readOperationTagsAndAuth(op);
@@ -60,9 +60,7 @@ export function WorkspaceContent(): React.ReactElement {
         deprecated={meta.deprecated}
       />
       <div className="flex-1 overflow-hidden">
-        <ScrollArea className="h-full" orientation="vertical">
-          <PlaceholderBody />
-        </ScrollArea>
+        <RequestEditor operation={op} />
       </div>
     </div>
   );
@@ -77,27 +75,20 @@ function findActive(
 }
 
 /**
- * Visible placeholder body. The Phase 5 work — request editor + response
- * viewer — plugs in here. Until then we render a clean <TODO> card so
- * the workspace still has something to scroll.
+ * Static skeleton used during SSR and before the client hydrates. The
+ * shape mirrors {@link RequestEditor} so the first paint matches.
  */
-function PlaceholderBody(): React.ReactElement {
+function RequestEditorSkeleton(): React.ReactElement {
   return (
-    <div className="flex h-full w-full items-center justify-center px-8">
-      <div
-        className={cn(
-          "flex max-w-md flex-col items-center gap-3 rounded-lg border border-dashed border-border bg-bg-subtle px-6 py-10 text-center",
-        )}
-      >
-        <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-          Request &amp; Response
-        </span>
-        <p className="text-sm leading-relaxed text-text-secondary">
-          The request editor and response viewer will appear here in the next
-          phase. The endpoint metadata above is fully wired to the mock
-          documentation.
-        </p>
+    <div className="flex h-full w-full flex-col bg-bg-base" aria-hidden="true">
+      <div className="h-[60px] border-b border-border bg-bg-subtle" />
+      <div className="flex h-9 items-center gap-3 border-b border-border px-3">
+        <div className="h-2 w-12 rounded bg-bg-muted" />
+        <div className="h-2 w-16 rounded bg-bg-muted" />
+        <div className="h-2 w-12 rounded bg-bg-muted" />
+        <div className="h-2 w-12 rounded bg-bg-muted" />
       </div>
+      <div className="flex-1" />
     </div>
   );
 }
