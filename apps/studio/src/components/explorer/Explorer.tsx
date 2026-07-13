@@ -15,6 +15,8 @@ import {
   DEFAULT_DOCUMENTATION,
   useExplorerState,
 } from "./Explorer.utils";
+import { useEndpointTabs } from "@/components/workspace/workspace.store";
+import { endpointToTab } from "@/components/workspace/workspace.types";
 
 /**
  * Sidebar-wide explorer.
@@ -37,6 +39,15 @@ export function Explorer({
   React.useEffect(() => setMounted(true), []);
 
   const state = useExplorerState(documentation ?? DEFAULT_DOCUMENTATION);
+  const openTab = useEndpointTabs((s) => s.openTab);
+
+  const handleActivate = React.useCallback(
+    (ep: Parameters<NonNullable<ExplorerProps["onEndpointSelect"]>>[0]) => {
+      openTab(endpointToTab(ep));
+      onEndpointSelect?.(ep);
+    },
+    [openTab, onEndpointSelect],
+  );
 
   // On the very first paint (SSR or hydration) we render a static shell
   // identical to the one before the state hook attaches. This avoids the
@@ -68,7 +79,7 @@ export function Explorer({
           <ExplorerTree
             tree={state.tree}
             state={state}
-            onActivateEndpoint={onEndpointSelect}
+            onActivateEndpoint={handleActivate}
           />
         </ScrollArea>
       </div>
