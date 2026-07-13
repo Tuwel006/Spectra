@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Transpile the @spectra/core workspace package
+  transpilePackages: ["@spectra/core"],
 };
 
 export default nextConfig;
