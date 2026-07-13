@@ -18,6 +18,39 @@ import { cn } from "@/lib/cn";
 import { getSafeStorage } from "@/lib/safe-storage";
 
 /**
+ * Static fallback rendered during SSR and the first client paint.
+ *
+ * Kept identical between server and client (no `useDefaultLayout`, no
+ * persisted widths) so React hydration matches byte-for-byte. The real
+ * resizable shell mounts in a `useEffect` after hydration completes.
+ */
+function AppLayoutFallback({
+  children,
+}: {
+  children?: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <div
+      className={cn(
+        "flex h-screen w-screen flex-col overflow-hidden",
+        "bg-[--color-bg-base] text-[--color-text-primary]",
+      )}
+    >
+      <TopBar />
+      <div className="flex flex-1 overflow-hidden">
+        <div className="hidden md:block md:w-[22%]" aria-hidden="true" />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <MainWorkspace />
+          {children}
+        </div>
+        <div className="hidden md:block md:w-[22%]" aria-hidden="true" />
+      </div>
+      <BottomPanel />
+    </div>
+  );
+}
+
+/**
  * Root application shell.
  *
  *   ┌─────────────────────────────────────────────────────┐
@@ -36,6 +69,31 @@ import { getSafeStorage } from "@/lib/safe-storage";
  * persisted separately via `useDefaultLayout`.
  */
 export function AppLayout({ children }: { children?: React.ReactNode }): React.ReactElement {
+  // Mount-flag pattern: prevents hydration mismatch caused by
+  // `useDefaultLayout` reading from `localStorage` and `useLayout`
+  // rehydrating from the persisted zustand store — both produce values
+  // that differ from what the server rendered.
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return <AppLayoutFallback>{children}</AppLayoutFallback>;
+  }
+
+  return <AppLayoutShell>{children}</AppLayoutShell>;
+}
+
+/**
+ * Inner shell with the real resizable panels. Only mounted after the
+ * first client paint so SSR and the very first client render agree.
+ */
+function AppLayoutShell({
+  children,
+}: {
+  children?: React.ReactNode;
+}): React.ReactElement {
   const layout = useLayout();
 
   const horizontal = useDefaultLayout({
