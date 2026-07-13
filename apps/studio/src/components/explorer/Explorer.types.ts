@@ -122,6 +122,8 @@ export interface ExplorerProps {
   readonly documentation?: Documentation;
   /** Fires when the user activates an endpoint row. Wired up by the host. */
   readonly onEndpointSelect?: (endpoint: ExplorerEndpoint) => void;
+  /** Slot for chrome controls (e.g. a panel collapse button) injected into the header. */
+  readonly headerActions?: React.ReactNode;
   /** Extra class names for the outer container. */
   readonly className?: string;
 }

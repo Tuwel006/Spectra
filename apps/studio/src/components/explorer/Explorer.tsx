@@ -33,6 +33,7 @@ import { endpointToTab } from "@/components/workspace/workspace.types";
 export function Explorer({
   documentation,
   onEndpointSelect,
+  headerActions,
   className,
 }: ExplorerProps): React.ReactElement {
   const [mounted, setMounted] = React.useState(false);
@@ -56,7 +57,7 @@ export function Explorer({
   if (!mounted) {
     return (
       <ExplorerShell className={className}>
-        <ExplorerHeader title="Explorer" subtitle="Studio" />
+        <ExplorerHeader title="Explorer" subtitle="Studio" actions={headerActions} />
         <ExplorerSearch value="" onChange={() => undefined} />
         <div className="flex flex-1 items-center justify-center px-4">
           <ExplorerEmpty />
@@ -68,7 +69,7 @@ export function Explorer({
 
   return (
     <ExplorerShell className={className}>
-      <ExplorerHeader title="Explorer" subtitle="Studio" />
+      <ExplorerHeader title="Explorer" subtitle="Studio" actions={headerActions} />
       <ExplorerSearch
         value={state.query}
         onChange={state.setQuery}

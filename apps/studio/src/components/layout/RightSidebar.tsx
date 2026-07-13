@@ -1,16 +1,21 @@
 "use client";
 
 import * as React from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
+import { useLayout } from "@/store/layout";
 
 /**
  * Right sidebar — placeholder.
  *
  * Will host the AI Assistant, analytics, logs and timeline views in
- * later phases. Today this is a layout-only panel.
+ * later phases. Today this is a layout-only panel with a close action
+ * in its own header so the panel boundary is self-contained.
  */
 export function RightSidebar(): React.ReactElement {
+  const { toggleRight } = useLayout();
+
   return (
     <aside
       className={cn(
@@ -28,9 +33,15 @@ export function RightSidebar(): React.ReactElement {
           <Sparkles className="h-3.5 w-3.5" />
           AI Assistant
         </div>
-        <span className="rounded bg-[--color-bg-muted] px-1.5 py-0.5 font-mono text-[10px] text-[--color-text-muted]">
-          TODO
-        </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Close right panel"
+          onClick={toggleRight}
+          className="h-6 w-6"
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
       </div>
 
       <div className="flex flex-1 items-center justify-center px-4">
