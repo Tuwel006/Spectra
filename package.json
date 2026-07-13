@@ -11,8 +11,14 @@
     "dev:studio": "pnpm --filter studio dev",
     "dev:docs": "pnpm --filter docs dev",
     "dev:api": "pnpm --filter example-api dev",
+    "start": "turbo run start",
+    "start:studio": "pnpm --filter studio start",
+    "start:docs": "pnpm --filter docs start",
     "build": "turbo run build",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean"
   },
   "keywords": [],
   "author": "",
