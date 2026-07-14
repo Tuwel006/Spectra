@@ -7,13 +7,14 @@ import {
   Separator,
   usePanelRef,
 } from "react-resizable-panels";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { PanelLeftOpen, PanelRightOpen } from "lucide-react";
 
 import { TopBar } from "./TopBar";
 import { LeftSidebar } from "./LeftSidebar";
 import { MainWorkspace } from "./MainWorkspace";
 import { RightSidebar } from "./RightSidebar";
 import { BottomPanel, BottomPanelBody } from "./BottomPanel";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useLayout, COLLAPSED_RAIL_SIZE } from "@/store/layout";
 import { cn } from "@/lib/cn";
 
@@ -127,7 +128,7 @@ function AppLayoutShell({
               side="left"
               collapsed={layout.leftCollapsed}
               width={layout.leftWidth}
-              minWidth={layout.leftWidth}
+              minWidth={14}
               maxWidth={50}
               onWidthChange={layout.setLeftWidth}
               onToggle={layout.toggleLeft}
@@ -174,7 +175,7 @@ function AppLayoutShell({
               side="right"
               collapsed={layout.rightCollapsed}
               width={layout.rightWidth}
-              minWidth={layout.rightWidth}
+              minWidth={14}
               maxWidth={50}
               onWidthChange={layout.setRightWidth}
               onToggle={layout.toggleRight}
@@ -237,6 +238,7 @@ function SidebarPanel({
 
   if (collapsed) {
     return (
+      <>
       <Panel
         id={side}
         key={`${side}-collapsed`}
@@ -246,6 +248,7 @@ function SidebarPanel({
         maxSize={COLLAPSED_RAIL_SIZE}
         className="flex flex-col"
       />
+      </>
     );
   }
 
@@ -254,10 +257,10 @@ function SidebarPanel({
       id={side}
       key={`${side}-full`}
       panelRef={panelRef}
-      defaultSize={width}
-      minSize={minWidth}
-      maxSize={maxWidth}
-      onResize={(size) => onWidthChange(Number(size))}
+      defaultSize={width.toString() + "%"}
+      minSize={minWidth.toString() + "%"}
+      maxSize={maxWidth.toString() + "%"}
+      onResize={(size) => onWidthChange(size.inPixels)}
       className="flex flex-col"
     >
       {side === "left" ? <LeftSidebar /> : <RightSidebar />}
@@ -278,25 +281,29 @@ function SidebarToggle({
   collapsed: boolean;
   onToggle: () => void;
 }): React.ReactElement {
-  const Icon = side === "left" ? ChevronRight : ChevronLeft;
+  // Panel-open icons signal "open this sidebar" — they're clearer than
+  // bare chevrons and look at home next to the panel-icon row in the
+  // sidebar headers. Wrapped in a circular floating button so the
+  // affordance reads as a thumb-tab rather than a toolbar item.
+  const Icon = side === "left" ? PanelLeftOpen : PanelRightOpen;
   const label = side === "left" ? "Show Explorer" : "Show AI Assistant";
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-label={label}
-      title={label}
-      className={cn(
-        "group absolute top-3 z-30 flex h-7 items-center gap-1 rounded-md border border-border",
-        "bg-bg-subtle px-2 text-[10px] font-semibold uppercase tracking-wider text-text-secondary shadow-sm",
-        "transition-colors hover:bg-accent hover:text-accent-fg hover:border-accent",
-        "focus-visible:bg-accent focus-visible:text-accent-fg focus-visible:outline-none",
-        side === "left" ? "left-3" : "right-3",
-      )}
-    >
-      <Icon className="h-3 w-3" />
-      <span>{side === "left" ? "Explorer" : "Assistant"}</span>
-    </button>
+    <Tooltip content={label} side={side === "left" ? "right" : "left"}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={label}
+        className={cn(
+          "group absolute top-3 z-30 grid h-8 w-8 place-items-center rounded-full",
+          "border border-border bg-bg-subtle text-text-secondary shadow-sm",
+          "transition-all hover:border-accent hover:bg-accent hover:text-accent-fg hover:shadow",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-1 focus-visible:ring-offset-bg-base",
+          side === "left" ? "left-3" : "right-3",
+        )}
+      >
+        <Icon className="h-4 w-4 transition-transform group-hover:scale-110" aria-hidden />
+      </button>
+    </Tooltip>
   );
 }
 

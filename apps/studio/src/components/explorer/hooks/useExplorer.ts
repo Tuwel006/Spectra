@@ -355,12 +355,11 @@ export function useExplorer(
   const sections = useToggle<ExplorerSectionId>(
     options.initialSections ?? [
       EXPLORER_SECTION.API,
-      EXPLORER_SECTION.Components,
-      EXPLORER_SECTION.Tags,
-      EXPLORER_SECTION.Servers,
+      EXPLORER_SECTION.Favorites,
+      EXPLORER_SECTION.Recent,
     ],
   );
-  const folders = useToggle<string>(options.initialFolders ?? []);
+  const folders = useToggle<string>(options.initialFolders ?? ["tag-folder:Users"]);
 
   const [query, setQuery] = React.useState<string>(options.initialQuery ?? "");
   const [selectedId, setSelectedId] = React.useState<string | undefined>(

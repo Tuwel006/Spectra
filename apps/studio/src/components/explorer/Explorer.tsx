@@ -12,6 +12,7 @@ import { ExplorerSearch } from "./ExplorerSearch";
 import { ExplorerTree } from "./ExplorerTree";
 import { useExplorer } from "./hooks/useExplorer";
 import { useExplorerSearch } from "./hooks/useExplorerSearch";
+import type { ExplorerEndpoint } from "./types/ExplorerNode";
 import type { ExplorerProps } from "./types/ExplorerState";
 
 /**
@@ -38,22 +39,30 @@ export function Explorer({
   const state = useExplorer(documentation);
   const search = useExplorerSearch(state.tree, state.query);
 
+  // When the user activates an endpoint row we want both the parent
+  // (`onEndpointSelect`, e.g. to switch the workspace tab) AND the
+  // explorer's own `selectedId` to update so the row gets the accent
+  // highlight. Wrap both into a single handler so callers don't have
+  // to remember to do the bookkeeping themselves.
+  const handleActivate = React.useCallback(
+    (endpoint: ExplorerEndpoint) => {
+      state.setSelectedId(endpoint.id);
+      onEndpointSelect?.(endpoint);
+    },
+    [state, onEndpointSelect],
+  );
+
   // On the very first paint (SSR or hydration) we render a static
   // shell identical to the one before the state hook attaches.
   if (!mounted) {
     return (
       <ExplorerShell className={className}>
-        <ExplorerHeader
-          title="Explorer"
-          subtitle="Studio"
-          documentation={documentation}
-          actions={headerActions}
-        />
+        <ExplorerHeader title="APIs" endpointCount={0} actions={headerActions} />
         <ExplorerSearch value="" onChange={() => undefined} />
         <div className="flex flex-1 items-center justify-center px-4">
           <ExplorerEmpty />
         </div>
-        <ExplorerFooter endpointCount={0} pathCount={0} version={documentation?.metadata?.version} />
+        <ExplorerFooter endpointCount={0} pathCount={0} />
       </ExplorerShell>
     );
   }
@@ -61,9 +70,8 @@ export function Explorer({
   return (
     <ExplorerShell className={className}>
       <ExplorerHeader
-        title="Explorer"
-        subtitle="Studio"
-        documentation={state.documentation}
+        title="APIs"
+        endpointCount={search.endpointCount}
         actions={headerActions}
       />
       <ExplorerSearch
@@ -76,7 +84,7 @@ export function Explorer({
           <ExplorerTree
             tree={search.tree}
             state={state}
-            onActivateEndpoint={onEndpointSelect}
+            onActivateEndpoint={handleActivate}
           />
         </ScrollArea>
       </div>

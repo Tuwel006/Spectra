@@ -114,7 +114,6 @@ const FolderNode = React.memo(function FolderNode({
           open={open}
           className={cn(
             "h-3 w-3 shrink-0 text-text-muted transition-transform duration-150",
-            open ? "rotate-0" : "-rotate-90",
           )}
         />
         <ExplorerFolderIcon

@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(pnpm tsc *)",
-      "Bash(pnpm next *)"
+      "Bash(pnpm next *)",
+      "Bash(pnpm --filter studio lint)"
     ]
   }
 }

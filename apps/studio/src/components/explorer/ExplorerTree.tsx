@@ -1,36 +1,36 @@
 import * as React from "react";
-import {
-  Cloud,
-  History,
-  Layers,
-  ListTree,
-  Settings,
-  Star,
-  Tag as TagIcon,
-} from "lucide-react";
+import { History, Layers, Pin } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 
 import { ExplorerEmpty } from "./ExplorerEmpty";
 import { ExplorerNode } from "./ExplorerNode";
 import { ExplorerSection } from "./ExplorerSection";
-import { EXPLORER_SECTION, type ExplorerSectionId } from "./types/ExplorerNode";
+import {
+  PinnedList,
+  RecentList,
+  PINNED_ITEMS,
+  RECENT_ITEMS,
+} from "./ExplorerStaticRows";
+import { EXPLORER_SECTION } from "./types/ExplorerNode";
 import type { ExplorerState } from "./types/ExplorerState";
 import type {
-  ExplorerComponentGroup,
   ExplorerEndpoint,
-  ExplorerLeaf,
-  ExplorerTagFolder,
   ExplorerTree as ExplorerTreeType,
 } from "./types/ExplorerNode";
 
 /**
- * Orchestrator for every section in the explorer. Stateless — the
- * parent owns the toggle / filter state via `useExplorer` /
- * `useExplorerSearch`.
+ * Orchestrator for the visible explorer sections. Stateless — toggle /
+ * filter state lives in `useExplorer`.
  *
- * Sections are rendered in the order from the spec layout:
- *   API → Components → Tags → Servers → Favorites → Recent → Settings
+ * Sections, in display order:
+ *   1. APIs             — tag folders (Authentication, Users, …) + endpoints
+ *   2. Pinned           — {@link PinnedList}
+ *   3. Recently Opened  — {@link RecentList}
+ *
+ * Components / Tags / Servers / Settings were intentionally removed to
+ * match the Postman-style reference; the data is still available on
+ * the underlying tree if a future surface wants to surface it.
  */
 export function ExplorerTree({
   tree,
@@ -42,11 +42,7 @@ export function ExplorerTree({
   onActivateEndpoint?: (endpoint: ExplorerEndpoint) => void;
 }): React.ReactElement {
   const isFiltering = state.query.trim().length > 0;
-  const totallyEmpty =
-    tree.api.length === 0 &&
-    tree.components.length === 0 &&
-    tree.tags.length === 0 &&
-    tree.servers.length === 0;
+  const totallyEmpty = tree.api.length === 0;
 
   if (totallyEmpty) {
     return <ExplorerEmpty query={isFiltering ? state.query : undefined} />;
@@ -54,13 +50,13 @@ export function ExplorerTree({
 
   return (
     <div
-      className="flex flex-col overflow-y-auto"
+      className="flex flex-col divide-y divide-border overflow-y-auto"
       role="tree"
       aria-label="API explorer"
     >
       <Section
         id={EXPLORER_SECTION.API}
-        title="API"
+        title="APIs"
         icon={<Layers className="h-3 w-3" />}
         count={tree.endpointCount}
         open={state.expandedSections.has(EXPLORER_SECTION.API)}
@@ -70,72 +66,25 @@ export function ExplorerTree({
       </Section>
 
       <Section
-        id={EXPLORER_SECTION.Components}
-        title="Components"
-        icon={<ListTree className="h-3 w-3" />}
-        count={tree.components.reduce((n, g) => n + g.entries.length, 0)}
-        open={state.expandedSections.has(EXPLORER_SECTION.Components)}
-        onToggle={() => state.toggleSection(EXPLORER_SECTION.Components)}
-      >
-        {renderComponents(tree, state)}
-      </Section>
-
-      <Section
-        id={EXPLORER_SECTION.Tags}
-        title="Tags"
-        icon={<TagIcon className="h-3 w-3" />}
-        count={tree.tags.length}
-        open={state.expandedSections.has(EXPLORER_SECTION.Tags)}
-        onToggle={() => state.toggleSection(EXPLORER_SECTION.Tags)}
-      >
-        <LeafGroup leaves={tree.tags} emptyHint="No tags yet." />
-      </Section>
-
-      <Section
-        id={EXPLORER_SECTION.Servers}
-        title="Servers"
-        icon={<Cloud className="h-3 w-3" />}
-        count={tree.servers.length}
-        open={state.expandedSections.has(EXPLORER_SECTION.Servers)}
-        onToggle={() => state.toggleSection(EXPLORER_SECTION.Servers)}
-      >
-        <LeafGroup
-          leaves={tree.servers as readonly ExplorerLeaf[]}
-          emptyHint="No servers configured."
-        />
-      </Section>
-
-      <Section
         id={EXPLORER_SECTION.Favorites}
-        title="Favorites"
-        icon={<Star className="h-3 w-3" />}
-        count={0}
+        title="Pinned"
+        icon={<Pin className="h-3 w-3" />}
+        count={PINNED_ITEMS.length}
         open={state.expandedSections.has(EXPLORER_SECTION.Favorites)}
         onToggle={() => state.toggleSection(EXPLORER_SECTION.Favorites)}
       >
-        <EmptySection message="Star endpoints to see them here." />
+        <PinnedList />
       </Section>
 
       <Section
         id={EXPLORER_SECTION.Recent}
-        title="Recent"
+        title="Recently Opened"
         icon={<History className="h-3 w-3" />}
-        count={0}
+        count={RECENT_ITEMS.length}
         open={state.expandedSections.has(EXPLORER_SECTION.Recent)}
         onToggle={() => state.toggleSection(EXPLORER_SECTION.Recent)}
       >
-        <EmptySection message="Recently opened endpoints will appear here." />
-      </Section>
-
-      <Section
-        id={EXPLORER_SECTION.Settings}
-        title="Settings"
-        icon={<Settings className="h-3 w-3" />}
-        count={0}
-        open={state.expandedSections.has(EXPLORER_SECTION.Settings)}
-        onToggle={() => state.toggleSection(EXPLORER_SECTION.Settings)}
-      >
-        <EmptySection message="Explorer preferences will land here." />
+        <RecentList />
       </Section>
     </div>
   );
@@ -154,7 +103,7 @@ function Section({
   onToggle,
   children,
 }: {
-  id: ExplorerSectionId;
+  id: string;
   title: string;
   icon: React.ReactNode;
   count: number;
@@ -186,7 +135,15 @@ function renderApi(
   onActivate: ((ep: ExplorerEndpoint) => void) | undefined,
 ): React.ReactNode {
   if (tree.api.length === 0) {
-    return <EmptySection message="No endpoints match your search." />;
+    return (
+      <p
+        className={cn(
+          "px-5 py-3 text-[11px] italic leading-relaxed text-text-muted",
+        )}
+      >
+        No endpoints match your search.
+      </p>
+    );
   }
   return (
     <div role="group" className="flex flex-col">
@@ -222,136 +179,4 @@ function renderApi(
       })}
     </div>
   );
-}
-
-/* ------------------------------------------------------------------ */
-/* Components section                                                  */
-/* ------------------------------------------------------------------ */
-
-function renderComponents(
-  tree: ExplorerTreeType,
-  state: ExplorerState,
-): React.ReactNode {
-  if (tree.components.length === 0) {
-    return <EmptySection message="No components in this documentation." />;
-  }
-  return (
-    <div role="group" className="flex flex-col">
-      {tree.components.map((group) => {
-        const folderOpen = state.expandedFolders.has(group.id);
-        return (
-          <div key={group.id} className="flex flex-col">
-            <ExplorerNode
-              kind="folder"
-              id={group.id}
-              name={group.name}
-              count={group.entries.length}
-              depth={1}
-              open={folderOpen}
-              onToggle={() => state.toggleFolder(group.id)}
-            />
-            {folderOpen ? (
-              <div role="group" className="flex flex-col">
-                {group.entries.map((leaf) => (
-                  <ExplorerNode
-                    key={leaf.id}
-                    kind="leaf"
-                    id={leaf.id}
-                    name={leaf.name}
-                    secondary={describeLeafSecondary(leaf)}
-                    iconKind={iconKindForLeaf(leaf)}
-                    depth={2}
-                  />
-                ))}
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Generic leaf group (Tags / Servers)                                 */
-/* ------------------------------------------------------------------ */
-
-function LeafGroup({
-  leaves,
-  emptyHint,
-}: {
-  leaves: readonly ExplorerLeaf[];
-  emptyHint: string;
-}): React.ReactNode {
-  if (leaves.length === 0) {
-    return <EmptySection message={emptyHint} />;
-  }
-  return (
-    <div role="group" className="flex flex-col">
-      {leaves.map((leaf) => (
-        <ExplorerNode
-          key={leaf.id}
-          kind="leaf"
-          id={leaf.id}
-          name={leaf.name}
-          secondary={describeLeafSecondary(leaf)}
-          iconKind={iconKindForLeaf(leaf)}
-          depth={1}
-        />
-      ))}
-    </div>
-  );
-}
-
-function EmptySection({ message }: { message: string }): React.ReactElement {
-  return (
-    <p
-      className={cn(
-        "px-5 py-3 text-[11px] italic leading-relaxed text-text-muted",
-      )}
-    >
-      {message}
-    </p>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Leaf helpers                                                        */
-/* ------------------------------------------------------------------ */
-
-function describeLeafSecondary(leaf: ExplorerLeaf): string | undefined {
-  switch (leaf.kind) {
-    case "schema": {
-      const propCount = Object.keys(leaf.schema.properties).length;
-      return `${propCount} ${propCount === 1 ? "field" : "fields"}`;
-    }
-    case "tag":
-      return leaf.description ?? undefined;
-    case "server":
-      return leaf.url;
-    case "placeholder":
-      return undefined;
-  }
-}
-
-function iconKindForLeaf(
-  leaf: ExplorerLeaf,
-):
-  | "schema"
-  | "tag"
-  | "server"
-  | "response"
-  | "parameter"
-  | "requestBody"
-  | "placeholder" {
-  switch (leaf.kind) {
-    case "schema":
-      return "schema";
-    case "tag":
-      return "tag";
-    case "server":
-      return "server";
-    case "placeholder":
-      return "placeholder";
-  }
 }

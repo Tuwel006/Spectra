@@ -9,8 +9,8 @@ import type { InputProps } from "./Input.types";
 
 const fieldStyles = cva(
   [
-    "flex w-full items-center rounded-md border bg-bg-base transition-colors",
-    "focus-within:ring-2 focus-within:ring-accent/40",
+    "relative flex w-full items-center rounded-md border bg-bg-base transition-colors",
+    "focus-within:border-accent",
     "disabled:cursor-not-allowed disabled:opacity-50",
   ],
   {
@@ -22,7 +22,7 @@ const fieldStyles = cva(
       },
       state: {
         normal: "border-border",
-        invalid: "border-method-delete focus-within:ring-method-delete/30",
+        invalid: "border-method-delete focus-within:border-method-delete",
       },
     },
     defaultVariants: { size: "md", state: "normal" },
@@ -109,8 +109,15 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         disabled={disabled}
         onChange={handleChange}
         aria-invalid={invalid || undefined}
+        style={{
+          outline: "none",
+          outlineOffset: "0",
+          WebkitAppearance: "none",
+          appearance: "none",
+          boxShadow: "none",
+        }}
         className={cn(
-          "h-full w-full bg-transparent text-text-primary placeholder:text-text-muted focus:outline-none disabled:cursor-not-allowed",
+          "h-full w-full min-w-0 flex-1 appearance-none border-0 bg-transparent text-text-primary outline-none placeholder:text-text-muted focus:outline-none focus:ring-0 focus:shadow-none disabled:cursor-not-allowed [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden",
           className,
         )}
         {...props}
@@ -122,6 +129,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
             if (!isControlled) setInternalValue("");
             const evt = {
               target: { value: "" },
+              currentTarget: { value: "" },
             } as unknown as ChangeEvent<HTMLInputElement>;
             onChange?.(evt);
           }}

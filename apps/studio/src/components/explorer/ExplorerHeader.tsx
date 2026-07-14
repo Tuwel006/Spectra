@@ -1,64 +1,45 @@
 import * as React from "react";
-import { ChevronDown, Hexagon } from "lucide-react";
 
-import type { Documentation } from "@spectra/core";
-
-import { ExplorerSparklesIcon } from "./ExplorerIcons";
+import { cn } from "@/lib/cn";
 
 /**
  * Sidebar-wide header strip.
  *
- * Layout (VS Code inspired):
+ * Layout (Postman-inspired):
  *   ┌─────────────────────────────────────────────────────┐
- *   │ [Hex]  Workspace ▾       Spectra · v1.4.2    [✕]   │
+ *   │ APIs                                       [actions]│
+ *   │ 37 Endpoints                                        │
  *   └─────────────────────────────────────────────────────┘
  *
  * The optional `actions` slot lets parent surfaces inject chrome
- * controls (collapse button, theme toggle, …) without coupling the
+ * controls (collapse-all, view-mode switch, …) without coupling the
  * Explorer to layout concerns.
  */
 export function ExplorerHeader({
   title,
-  subtitle,
-  documentation,
+  endpointCount,
   actions,
 }: {
   title: string;
-  subtitle?: string;
-  /** Optional documentation source — drives the project + version lines. */
-  documentation?: Pick<Documentation, "name" | "metadata" | "info">;
+  /** Total endpoint count — rendered as a muted subtitle line. */
+  endpointCount?: number;
   actions?: React.ReactNode;
 }): React.ReactElement {
-  const projectName = documentation?.name ?? title;
-  const version = documentation?.metadata?.version ?? documentation?.info?.version;
   return (
-    <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-border bg-bg-subtle px-3">
-      <button
-        type="button"
-        className="flex min-w-0 items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-text-secondary transition-colors hover:text-text-primary"
-        aria-label="Workspace selector"
-      >
-        <Hexagon className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
-        <span className="truncate">{projectName}</span>
-        <ChevronDown
-          className="h-3 w-3 shrink-0 text-text-muted"
-          aria-hidden="true"
-        />
-      </button>
-      <div className="flex shrink-0 items-center gap-1.5">
-        {version ? (
-          <span className="rounded-sm bg-bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-text-muted">
-            v{version}
-          </span>
+    <div className="flex h-12 shrink-0 flex-col justify-center gap-0.5 border-b border-border bg-bg-subtle px-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-sm font-semibold text-text-primary">
+          {title}
+        </span>
+        {actions ? (
+          <div className="flex shrink-0 items-center gap-1">{actions}</div>
         ) : null}
-        {subtitle ? (
-          <div className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-text-muted">
-            <ExplorerSparklesIcon className="h-3 w-3" />
-            <span>{subtitle}</span>
-          </div>
-        ) : null}
-        {actions}
       </div>
+      {typeof endpointCount === "number" ? (
+        <span className={cn("text-[11px] font-medium text-text-muted")}>
+          {endpointCount} {endpointCount === 1 ? "Endpoint" : "Endpoints"}
+        </span>
+      ) : null}
     </div>
   );
 }
