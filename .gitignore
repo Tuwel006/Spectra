@@ -16,6 +16,8 @@ pnpm-debug.log*
 out/
 build/
 
+dist/
+
 # turborepo
 .turbo/
 
