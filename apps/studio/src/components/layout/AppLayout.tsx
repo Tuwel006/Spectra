@@ -5,8 +5,9 @@ import {
   Group,
   Panel,
   Separator,
-  useDefaultLayout,
+  usePanelRef,
 } from "react-resizable-panels";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { TopBar } from "./TopBar";
 import { LeftSidebar } from "./LeftSidebar";
@@ -15,14 +16,12 @@ import { RightSidebar } from "./RightSidebar";
 import { BottomPanel, BottomPanelBody } from "./BottomPanel";
 import { useLayout, COLLAPSED_RAIL_SIZE } from "@/store/layout";
 import { cn } from "@/lib/cn";
-import { getSafeStorage } from "@/lib/safe-storage";
 
 /**
  * Static fallback rendered during SSR and the first client paint.
  *
- * Kept identical between server and client (no `useDefaultLayout`, no
- * persisted widths) so React hydration matches byte-for-byte. The real
- * resizable shell mounts in a `useEffect` after hydration completes.
+ * Layout matches the live `AppLayoutShell` shape (both sidebars open,
+ * bottom collapsed) so hydration doesn't cause a width jump.
  */
 function AppLayoutFallback({
   children,
@@ -38,12 +37,12 @@ function AppLayoutFallback({
     >
       <TopBar />
       <div className="flex flex-1 overflow-hidden">
-        <div className="hidden md:block md:w-[22%]" aria-hidden="true" />
+        <div className="hidden md:flex md:w-[26%]" aria-hidden="true" />
         <div className="flex min-w-0 flex-1 flex-col">
           <MainWorkspace />
           {children}
         </div>
-        <div className="hidden md:block md:w-[22%]" aria-hidden="true" />
+        <div className="hidden md:flex md:w-[26%]" aria-hidden="true" />
       </div>
       <BottomPanel />
     </div>
@@ -63,16 +62,13 @@ function AppLayoutFallback({
  *   │                  Bottom Panel (collapsed)           │
  *   └─────────────────────────────────────────────────────┘
  *
- * Layout-only. All panel sizes are percentages so the shell scales
- * from a 13" laptop to ultrawide. Collapse state is persisted to
- * `localStorage` via the `useLayout` zustand store; panel sizes are
- * persisted separately via `useDefaultLayout`.
+ * Layout-only. `useLayout` (zustand) is the single source of truth for
+ * panel widths and collapse state. When a sidebar is "collapsed" we
+ * shrink it to 0% width so the panel fully disappears — a floating
+ * toggle button attached to the workspace edge stays visible so the
+ * user can re-expand without hunting for a hidden control.
  */
 export function AppLayout({ children }: { children?: React.ReactNode }): React.ReactElement {
-  // Mount-flag pattern: prevents hydration mismatch caused by
-  // `useDefaultLayout` reading from `localStorage` and `useLayout`
-  // rehydrating from the persisted zustand store — both produce values
-  // that differ from what the server rendered.
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => {
     setMounted(true);
@@ -86,8 +82,17 @@ export function AppLayout({ children }: { children?: React.ReactNode }): React.R
 }
 
 /**
- * Inner shell with the real resizable panels. Only mounted after the
- * first client paint so SSR and the very first client render agree.
+ * Inner shell with the real resizable panels.
+ *
+ * Drag behaviour: while a sidebar is expanded, the drag handle only
+ * enlarges it (toward the maximum). Shrinking below the default width
+ * is reserved for the explicit collapse button — this prevents users
+ * from accidentally clipping route labels.
+ *
+ * Collapse behaviour: clicking the collapse button sets the panel
+ * width to `COLLAPSED_RAIL_SIZE` (0%). The panel itself is hidden,
+ * but a floating toggle button anchored to the workspace edge lets
+ * the user re-open it.
  */
 function AppLayoutShell({
   children,
@@ -95,18 +100,6 @@ function AppLayoutShell({
   children?: React.ReactNode;
 }): React.ReactElement {
   const layout = useLayout();
-
-  const horizontal = useDefaultLayout({
-    id: "spectra.shell.horizontal",
-    panelIds: ["left", "workspace", "right"],
-    storage: getSafeStorage(),
-  });
-
-  const vertical = useDefaultLayout({
-    id: "spectra.shell.vertical",
-    panelIds: ["main", "bottom"],
-    storage: getSafeStorage(),
-  });
 
   return (
     <div
@@ -119,8 +112,6 @@ function AppLayoutShell({
 
       <Group
         orientation="vertical"
-        defaultLayout={vertical.defaultLayout}
-        onLayoutChanged={layout.bottomOpen ? vertical.onLayoutChanged : undefined}
         className="flex-1 overflow-hidden"
       >
         <Panel
@@ -130,139 +121,182 @@ function AppLayoutShell({
         >
           <Group
             orientation="horizontal"
-            defaultLayout={horizontal.defaultLayout}
-            onLayoutChanged={horizontal.onLayoutChanged}
             className="h-full overflow-hidden"
           >
-            <LeftRail
+            <SidebarPanel
+              side="left"
               collapsed={layout.leftCollapsed}
               width={layout.leftWidth}
-              onResize={layout.setLeftWidth}
+              minWidth={layout.leftWidth}
+              maxWidth={50}
+              onWidthChange={layout.setLeftWidth}
+              onToggle={layout.toggleLeft}
             />
 
-            <Panel id="workspace" minSize={30} className="flex flex-col overflow-hidden">
+            {/* Resize handle between sidebar and workspace. Hidden
+                when the sidebar is collapsed (panel is 0% wide and
+                nothing to drag against). */}
+            {!layout.leftCollapsed ? (
+              <ResizeHandle ariaLabel="Resize left sidebar" />
+            ) : null}
+
+            <Panel
+              id="workspace"
+              minSize={30}
+              className="relative flex flex-col overflow-hidden"
+            >
               <MainWorkspace />
               {children}
+
+              {/* Floating toggle buttons — only visible while a
+                  sidebar is hidden so the user can re-open it. */}
+              {layout.leftCollapsed ? (
+                <SidebarToggle
+                  side="left"
+                  collapsed
+                  onToggle={layout.toggleLeft}
+                />
+              ) : null}
+              {layout.rightCollapsed ? (
+                <SidebarToggle
+                  side="right"
+                  collapsed
+                  onToggle={layout.toggleRight}
+                />
+              ) : null}
             </Panel>
 
-            <RightRail
+            {!layout.rightCollapsed ? (
+              <ResizeHandle ariaLabel="Resize right sidebar" />
+            ) : null}
+
+            <SidebarPanel
+              side="right"
               collapsed={layout.rightCollapsed}
               width={layout.rightWidth}
-              onResize={layout.setRightWidth}
+              minWidth={layout.rightWidth}
+              maxWidth={50}
+              onWidthChange={layout.setRightWidth}
+              onToggle={layout.toggleRight}
             />
           </Group>
         </Panel>
 
-        {layout.bottomOpen && (
-          <>
-            <BottomResizeHandle ariaLabel="Resize bottom panel" />
-            <Panel
-              id="bottom"
-              defaultSize={layout.bottomHeight}
-              minSize={12}
-              maxSize={70}
-              onResize={(size) => layout.setBottomHeight(Number(size))}
-              className="flex flex-col overflow-hidden"
-            >
-              <BottomPanelBody />
-            </Panel>
-          </>
-        )}
+        <BottomResizeHandle ariaLabel="Resize bottom panel" />
+
+        <Panel
+          id="bottom"
+          defaultSize={layout.bottomOpen ? layout.bottomHeight : 0}
+          minSize={layout.bottomOpen ? 12 : 0}
+          maxSize={70}
+          onResize={(size) => layout.setBottomHeight(Number(size))}
+          className="flex flex-col overflow-hidden"
+        >
+          <BottomPanelBody />
+        </Panel>
       </Group>
 
       {/* Always-visible thin strip even when collapsed */}
-      {!layout.bottomOpen && <BottomPanel />}
+      <BottomPanel />
     </div>
   );
 }
 
-function LeftRail({
+/* ------------------------------------------------------------------ */
+/* Sidebar panel                                                       */
+/* ------------------------------------------------------------------ */
+
+function SidebarPanel({
+  side,
   collapsed,
   width,
-  onResize,
+  minWidth,
+  maxWidth,
+  onWidthChange,
+  onToggle,
 }: {
+  side: "left" | "right";
   collapsed: boolean;
   width: number;
-  onResize: (size: number) => void;
+  minWidth: number;
+  maxWidth: number;
+  onWidthChange: (size: number) => void;
+  onToggle: () => void;
 }): React.ReactElement {
-  const { toggleLeft } = useLayout();
+  const panelRef = usePanelRef();
+
+  // Imperative resize — snap the panel to the right size whenever the
+  // collapse flag or stored width changes. This is the single source
+  // of truth for panel sizing; react-resizable-panels otherwise only
+  // honours `defaultSize` on mount.
+  React.useEffect(() => {
+    const ref = panelRef.current;
+    if (!ref) return;
+    ref.resize(collapsed ? COLLAPSED_RAIL_SIZE : width);
+  }, [collapsed, width, panelRef]);
+
   if (collapsed) {
     return (
       <Panel
-        id="left"
+        id={side}
+        key={`${side}-collapsed`}
+        panelRef={panelRef}
         defaultSize={COLLAPSED_RAIL_SIZE}
         minSize={COLLAPSED_RAIL_SIZE}
         maxSize={COLLAPSED_RAIL_SIZE}
-      >
-        <CollapsedRail side="left" onClick={toggleLeft} />
-      </Panel>
+        className="flex flex-col"
+      />
     );
   }
+
   return (
-    <>
-      <Panel
-        id="left"
-        defaultSize={width}
-        minSize={14}
-        maxSize={45}
-        onResize={(size) => onResize(Number(size))}
-        className="flex flex-col"
-      >
-        <LeftSidebar />
-      </Panel>
-      <ResizeHandle ariaLabel="Resize left sidebar" />
-    </>
+    <Panel
+      id={side}
+      key={`${side}-full`}
+      panelRef={panelRef}
+      defaultSize={width}
+      minSize={minWidth}
+      maxSize={maxWidth}
+      onResize={(size) => onWidthChange(Number(size))}
+      className="flex flex-col"
+    >
+      {side === "left" ? <LeftSidebar /> : <RightSidebar />}
+    </Panel>
   );
 }
 
-function RightRail({
-  collapsed,
-  width,
-  onResize,
+/* ------------------------------------------------------------------ */
+/* Floating sidebar toggle — visible only while the sidebar is hidden  */
+/* ------------------------------------------------------------------ */
+
+function SidebarToggle({
+  side,
+  collapsed: _collapsed,
+  onToggle,
 }: {
+  side: "left" | "right";
   collapsed: boolean;
-  width: number;
-  onResize: (size: number) => void;
+  onToggle: () => void;
 }): React.ReactElement {
-  const { toggleRight } = useLayout();
-  if (collapsed) {
-    return (
-      <Panel
-        id="right"
-        defaultSize={COLLAPSED_RAIL_SIZE}
-        minSize={COLLAPSED_RAIL_SIZE}
-        maxSize={COLLAPSED_RAIL_SIZE}
-      >
-        <CollapsedRail side="right" onClick={toggleRight} />
-      </Panel>
-    );
-  }
+  const Icon = side === "left" ? ChevronRight : ChevronLeft;
+  const label = side === "left" ? "Show Explorer" : "Show AI Assistant";
   return (
-    <>
-      <ResizeHandle ariaLabel="Resize right sidebar" />
-      <Panel
-        id="right"
-        defaultSize={width}
-        minSize={18}
-        maxSize={45}
-        onResize={(size) => onResize(Number(size))}
-        className="flex flex-col"
-      >
-        <RightSidebar />
-      </Panel>
-    </>
-  );
-}
-
-function ResizeHandle({ ariaLabel }: { ariaLabel: string }): React.ReactElement {
-  return (
-    <Separator
-      aria-label={ariaLabel}
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={label}
+      title={label}
       className={cn(
-        "w-px bg-[--color-border] transition-colors",
-        "hover:bg-[--color-accent]/40 data-[separator=active]:bg-[--color-accent]",
+        "group absolute top-3 z-30 flex h-7 items-center gap-1 rounded-md border border-border",
+        "bg-bg-subtle px-2 text-[10px] font-semibold uppercase tracking-wider text-text-secondary shadow-sm",
+        "transition-colors hover:bg-accent hover:text-accent-fg hover:border-accent",
+        "focus-visible:bg-accent focus-visible:text-accent-fg focus-visible:outline-none",
+        side === "left" ? "left-3" : "right-3",
       )}
-    />
+    >
+      <Icon className="h-3 w-3" />
+      <span>{side === "left" ? "Explorer" : "Assistant"}</span>
+    </button>
   );
 }
 
@@ -271,29 +305,20 @@ function BottomResizeHandle({ ariaLabel }: { ariaLabel: string }): React.ReactEl
     <Separator
       aria-label={ariaLabel}
       className={cn(
-        "h-px bg-[--color-border] transition-colors",
+        "h-px shrink-0 bg-[--color-border] transition-colors",
         "hover:bg-[--color-accent]/40 data-[separator=active]:bg-[--color-accent]",
       )}
     />
   );
 }
 
-function CollapsedRail({
-  side,
-  onClick,
-}: {
-  side: "left" | "right";
-  onClick: () => void;
-}): React.ReactElement {
+function ResizeHandle({ ariaLabel }: { ariaLabel: string }): React.ReactElement {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={`Expand ${side} panel`}
+    <Separator
+      aria-label={ariaLabel}
       className={cn(
-        "h-full w-full border-[--color-border] bg-[--color-bg-subtle]",
-        "hover:bg-[--color-bg-muted] transition-colors",
-        side === "left" ? "border-r" : "border-l",
+        "w-px shrink-0 bg-[--color-border] transition-colors",
+        "hover:bg-[--color-accent]/40 data-[separator=active]:bg-[--color-accent]",
       )}
     />
   );

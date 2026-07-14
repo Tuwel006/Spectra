@@ -4,28 +4,33 @@ import {
   History,
   Layers,
   ListTree,
+  Settings,
   Star,
   Tag as TagIcon,
 } from "lucide-react";
 
+import { cn } from "@/lib/cn";
+
 import { ExplorerEmpty } from "./ExplorerEmpty";
-import { ExplorerEndpoint } from "./ExplorerEndpoint";
-import { ExplorerFolder } from "./ExplorerFolder";
-import { ExplorerItem } from "./ExplorerItem";
+import { ExplorerNode } from "./ExplorerNode";
 import { ExplorerSection } from "./ExplorerSection";
+import { EXPLORER_SECTION, type ExplorerSectionId } from "./types/ExplorerNode";
+import type { ExplorerState } from "./types/ExplorerState";
 import type {
-  ExplorerEndpoint as ExplorerEndpointType,
+  ExplorerComponentGroup,
+  ExplorerEndpoint,
   ExplorerLeaf,
-  ExplorerState,
+  ExplorerTagFolder,
   ExplorerTree as ExplorerTreeType,
-} from "./Explorer.types";
+} from "./types/ExplorerNode";
 
 /**
  * Orchestrator for every section in the explorer. Stateless — the
- * parent owns the toggle / filter state via `useExplorerState`.
+ * parent owns the toggle / filter state via `useExplorer` /
+ * `useExplorerSearch`.
  *
  * Sections are rendered in the order from the spec layout:
- *   API → Components → Tags → Servers → Favorites → Recent
+ *   API → Components → Tags → Servers → Favorites → Recent → Settings
  */
 export function ExplorerTree({
   tree,
@@ -34,7 +39,7 @@ export function ExplorerTree({
 }: {
   tree: ExplorerTreeType;
   state: ExplorerState;
-  onActivateEndpoint?: (endpoint: ExplorerEndpointType) => void;
+  onActivateEndpoint?: (endpoint: ExplorerEndpoint) => void;
 }): React.ReactElement {
   const isFiltering = state.query.trim().length > 0;
   const totallyEmpty =
@@ -47,156 +52,306 @@ export function ExplorerTree({
     return <ExplorerEmpty query={isFiltering ? state.query : undefined} />;
   }
 
-  const sections = [
-    { id: "section:api", title: "API", icon: <Layers className="h-3 w-3" />, content: tree.api, count: tree.endpointCount },
-    { id: "section:components", title: "Components", icon: <ListTree className="h-3 w-3" />, content: tree.components, count: tree.components.reduce((n, g) => n + g.entries.length, 0) },
-    { id: "section:tags", title: "Tags", icon: <TagIcon className="h-3 w-3" />, content: tree.tags, count: tree.tags.length, isLeaf: true },
-    { id: "section:servers", title: "Servers", icon: <Cloud className="h-3 w-3" />, content: tree.servers, count: tree.servers.length, isLeaf: true },
-    { id: "section:favorites", title: "Favorites", icon: <Star className="h-3 w-3" />, count: 0, isLeaf: true, emptyHint: "Star endpoints to see them here." },
-    { id: "section:recent", title: "Recent", icon: <History className="h-3 w-3" />, count: 0, isLeaf: true, emptyHint: "Recently opened endpoints will appear here." },
-  ] as const;
-
   return (
-    <div className="flex flex-col overflow-y-auto" role="tree" aria-label="API explorer">
-      {sections.map((section) => {
-        const open = state.expandedSections.has(section.id);
+    <div
+      className="flex flex-col overflow-y-auto"
+      role="tree"
+      aria-label="API explorer"
+    >
+      <Section
+        id={EXPLORER_SECTION.API}
+        title="API"
+        icon={<Layers className="h-3 w-3" />}
+        count={tree.endpointCount}
+        open={state.expandedSections.has(EXPLORER_SECTION.API)}
+        onToggle={() => state.toggleSection(EXPLORER_SECTION.API)}
+      >
+        {renderApi(tree, state, onActivateEndpoint)}
+      </Section>
+
+      <Section
+        id={EXPLORER_SECTION.Components}
+        title="Components"
+        icon={<ListTree className="h-3 w-3" />}
+        count={tree.components.reduce((n, g) => n + g.entries.length, 0)}
+        open={state.expandedSections.has(EXPLORER_SECTION.Components)}
+        onToggle={() => state.toggleSection(EXPLORER_SECTION.Components)}
+      >
+        {renderComponents(tree, state)}
+      </Section>
+
+      <Section
+        id={EXPLORER_SECTION.Tags}
+        title="Tags"
+        icon={<TagIcon className="h-3 w-3" />}
+        count={tree.tags.length}
+        open={state.expandedSections.has(EXPLORER_SECTION.Tags)}
+        onToggle={() => state.toggleSection(EXPLORER_SECTION.Tags)}
+      >
+        <LeafGroup leaves={tree.tags} emptyHint="No tags yet." />
+      </Section>
+
+      <Section
+        id={EXPLORER_SECTION.Servers}
+        title="Servers"
+        icon={<Cloud className="h-3 w-3" />}
+        count={tree.servers.length}
+        open={state.expandedSections.has(EXPLORER_SECTION.Servers)}
+        onToggle={() => state.toggleSection(EXPLORER_SECTION.Servers)}
+      >
+        <LeafGroup
+          leaves={tree.servers as readonly ExplorerLeaf[]}
+          emptyHint="No servers configured."
+        />
+      </Section>
+
+      <Section
+        id={EXPLORER_SECTION.Favorites}
+        title="Favorites"
+        icon={<Star className="h-3 w-3" />}
+        count={0}
+        open={state.expandedSections.has(EXPLORER_SECTION.Favorites)}
+        onToggle={() => state.toggleSection(EXPLORER_SECTION.Favorites)}
+      >
+        <EmptySection message="Star endpoints to see them here." />
+      </Section>
+
+      <Section
+        id={EXPLORER_SECTION.Recent}
+        title="Recent"
+        icon={<History className="h-3 w-3" />}
+        count={0}
+        open={state.expandedSections.has(EXPLORER_SECTION.Recent)}
+        onToggle={() => state.toggleSection(EXPLORER_SECTION.Recent)}
+      >
+        <EmptySection message="Recently opened endpoints will appear here." />
+      </Section>
+
+      <Section
+        id={EXPLORER_SECTION.Settings}
+        title="Settings"
+        icon={<Settings className="h-3 w-3" />}
+        count={0}
+        open={state.expandedSections.has(EXPLORER_SECTION.Settings)}
+        onToggle={() => state.toggleSection(EXPLORER_SECTION.Settings)}
+      >
+        <EmptySection message="Explorer preferences will land here." />
+      </Section>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Section wrapper                                                     */
+/* ------------------------------------------------------------------ */
+
+function Section({
+  id,
+  title,
+  icon,
+  count,
+  open,
+  onToggle,
+  children,
+}: {
+  id: ExplorerSectionId;
+  title: string;
+  icon: React.ReactNode;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <ExplorerSection
+      id={id}
+      title={title}
+      count={count}
+      open={open}
+      onToggle={onToggle}
+      defaultIcon={icon}
+    >
+      {children}
+    </ExplorerSection>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* API section                                                         */
+/* ------------------------------------------------------------------ */
+
+function renderApi(
+  tree: ExplorerTreeType,
+  state: ExplorerState,
+  onActivate: ((ep: ExplorerEndpoint) => void) | undefined,
+): React.ReactNode {
+  if (tree.api.length === 0) {
+    return <EmptySection message="No endpoints match your search." />;
+  }
+  return (
+    <div role="group" className="flex flex-col">
+      {tree.api.map((folder) => {
+        const folderOpen = state.expandedFolders.has(folder.id);
         return (
-          <ExplorerSection
-            key={section.id}
-            id={section.id}
-            title={section.title}
-            count={section.count}
-            open={open}
-            onToggle={() => state.toggleSection(section.id)}
-            defaultIcon={section.icon}
-          >
-            {renderSectionContent(section, tree, state, onActivateEndpoint)}
-          </ExplorerSection>
+          <div key={folder.id} className="flex flex-col">
+            <ExplorerNode
+              kind="folder"
+              id={folder.id}
+              name={folder.name}
+              count={folder.endpoints.length}
+              depth={1}
+              open={folderOpen}
+              onToggle={() => state.toggleFolder(folder.id)}
+            />
+            {folderOpen ? (
+              <div role="group" className="flex flex-col">
+                {folder.endpoints.map((ep) => (
+                  <ExplorerNode
+                    key={ep.id}
+                    kind="endpoint"
+                    endpoint={ep}
+                    depth={2}
+                    selected={state.selectedId === ep.id}
+                    onActivate={(e) => onActivate?.(e)}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
         );
       })}
     </div>
   );
 }
 
-type SectionConfig = {
-  readonly id: string;
-  readonly title: string;
-  readonly icon: React.ReactNode;
-  readonly content?: readonly unknown[];
-  readonly count: number;
-  readonly isLeaf?: boolean;
-  readonly emptyHint?: string;
-};
-
-function renderSectionContent(
-  section: SectionConfig,
-  tree: ExplorerTreeType,
-  state: ExplorerState,
-  onActivate: ((ep: ExplorerEndpointType) => void) | undefined,
-): React.ReactNode {
-  switch (section.id) {
-    case "section:api":
-      return renderApi(tree, state, onActivate);
-    case "section:components":
-      return renderComponents(tree, state);
-    case "section:tags":
-      return renderLeaves(tree.tags, state, "No tags yet.");
-    case "section:servers":
-      return renderLeaves(tree.servers as readonly ExplorerLeaf[], state, "No servers configured.");
-    case "section:favorites":
-    case "section:recent":
-      return (
-        <p className="px-5 py-3 text-[11px] italic leading-relaxed text-text-muted">
-          {section.emptyHint}
-        </p>
-      );
-  }
-  return null;
-}
-
-function renderApi(
-  tree: ExplorerTreeType,
-  state: ExplorerState,
-  onActivate: ((ep: ExplorerEndpointType) => void) | undefined,
-): React.ReactNode {
-  if (tree.api.length === 0) {
-    return (
-      <p className="px-5 py-3 text-[11px] italic leading-relaxed text-text-muted">
-        No endpoints match your search.
-      </p>
-    );
-  }
-  return tree.api.map((folder) => {
-    const folderOpen = state.expandedFolders.has(folder.id);
-    return (
-      <ExplorerFolder
-        key={folder.id}
-        id={folder.id}
-        name={folder.name}
-        count={folder.endpoints.length}
-        open={folderOpen}
-        onToggle={() => state.toggleFolder(folder.id)}
-      >
-        {folder.endpoints.map((ep) => (
-          <ExplorerEndpoint
-            key={ep.id}
-            endpoint={ep}
-            selected={state.selectedId === ep.id}
-            onActivate={onActivate}
-          />
-        ))}
-      </ExplorerFolder>
-    );
-  });
-}
+/* ------------------------------------------------------------------ */
+/* Components section                                                  */
+/* ------------------------------------------------------------------ */
 
 function renderComponents(
   tree: ExplorerTreeType,
   state: ExplorerState,
 ): React.ReactNode {
   if (tree.components.length === 0) {
-    return (
-      <p className="px-5 py-3 text-[11px] italic leading-relaxed text-text-muted">
-        No components in this documentation.
-      </p>
-    );
+    return <EmptySection message="No components in this documentation." />;
   }
-  return tree.components.map((group) => {
-    const folderOpen = state.expandedFolders.has(group.id);
-    return (
-      <ExplorerFolder
-        key={group.id}
-        id={group.id}
-        name={group.name}
-        count={group.entries.length}
-        open={folderOpen}
-        onToggle={() => state.toggleFolder(group.id)}
-      >
-        {group.entries.map((leaf) => (
-          <ExplorerItem key={leaf.id} leaf={leaf} />
-        ))}
-      </ExplorerFolder>
-    );
-  });
+  return (
+    <div role="group" className="flex flex-col">
+      {tree.components.map((group) => {
+        const folderOpen = state.expandedFolders.has(group.id);
+        return (
+          <div key={group.id} className="flex flex-col">
+            <ExplorerNode
+              kind="folder"
+              id={group.id}
+              name={group.name}
+              count={group.entries.length}
+              depth={1}
+              open={folderOpen}
+              onToggle={() => state.toggleFolder(group.id)}
+            />
+            {folderOpen ? (
+              <div role="group" className="flex flex-col">
+                {group.entries.map((leaf) => (
+                  <ExplorerNode
+                    key={leaf.id}
+                    kind="leaf"
+                    id={leaf.id}
+                    name={leaf.name}
+                    secondary={describeLeafSecondary(leaf)}
+                    iconKind={iconKindForLeaf(leaf)}
+                    depth={2}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
-function renderLeaves(
-  leaves: readonly ExplorerLeaf[],
-  _state: ExplorerState,
-  emptyHint: string,
-): React.ReactNode {
+/* ------------------------------------------------------------------ */
+/* Generic leaf group (Tags / Servers)                                 */
+/* ------------------------------------------------------------------ */
+
+function LeafGroup({
+  leaves,
+  emptyHint,
+}: {
+  leaves: readonly ExplorerLeaf[];
+  emptyHint: string;
+}): React.ReactNode {
   if (leaves.length === 0) {
-    return (
-      <p className="px-5 py-3 text-[11px] italic leading-relaxed text-text-muted">
-        {emptyHint}
-      </p>
-    );
+    return <EmptySection message={emptyHint} />;
   }
   return (
     <div role="group" className="flex flex-col">
       {leaves.map((leaf) => (
-        <ExplorerItem key={leaf.id} leaf={leaf} />
+        <ExplorerNode
+          key={leaf.id}
+          kind="leaf"
+          id={leaf.id}
+          name={leaf.name}
+          secondary={describeLeafSecondary(leaf)}
+          iconKind={iconKindForLeaf(leaf)}
+          depth={1}
+        />
       ))}
     </div>
   );
+}
+
+function EmptySection({ message }: { message: string }): React.ReactElement {
+  return (
+    <p
+      className={cn(
+        "px-5 py-3 text-[11px] italic leading-relaxed text-text-muted",
+      )}
+    >
+      {message}
+    </p>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Leaf helpers                                                        */
+/* ------------------------------------------------------------------ */
+
+function describeLeafSecondary(leaf: ExplorerLeaf): string | undefined {
+  switch (leaf.kind) {
+    case "schema": {
+      const propCount = Object.keys(leaf.schema.properties).length;
+      return `${propCount} ${propCount === 1 ? "field" : "fields"}`;
+    }
+    case "tag":
+      return leaf.description ?? undefined;
+    case "server":
+      return leaf.url;
+    case "placeholder":
+      return undefined;
+  }
+}
+
+function iconKindForLeaf(
+  leaf: ExplorerLeaf,
+):
+  | "schema"
+  | "tag"
+  | "server"
+  | "response"
+  | "parameter"
+  | "requestBody"
+  | "placeholder" {
+  switch (leaf.kind) {
+    case "schema":
+      return "schema";
+    case "tag":
+      return "tag";
+    case "server":
+      return "server";
+    case "placeholder":
+      return "placeholder";
+  }
 }

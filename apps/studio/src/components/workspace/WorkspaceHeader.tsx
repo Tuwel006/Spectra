@@ -1,24 +1,22 @@
 "use client";
 
 import * as React from "react";
-import { PanelLeft, PanelRight, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { useLayout } from "@/store/layout";
 
 /**
- * Toolbar above the workspace body. Mirrors the layout store's
- * left/right collapse state and exposes the AI Assistant trigger that
- * the design reference shows in the same row.
+ * Toolbar above the workspace body.
+ *
+ * Hosts only the AI Assistant trigger — the sidebar collapse controls
+ * live inside the sidebars themselves (Explorer header on the left,
+ * RightSidebar header on the right) so they're always attached to
+ * the panel they control.
  */
 export function WorkspaceHeader(): React.ReactElement {
-  const {
-    leftCollapsed,
-    rightCollapsed,
-    toggleLeft,
-    toggleRight,
-  } = useLayout();
+  const { rightCollapsed, toggleRight } = useLayout();
 
   return (
     <div
@@ -26,31 +24,15 @@ export function WorkspaceHeader(): React.ReactElement {
         "flex h-9 shrink-0 items-center gap-1 border-b border-border bg-bg-subtle px-2",
       )}
     >
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label={leftCollapsed ? "Open sidebar" : "Close sidebar"}
-        aria-pressed={!leftCollapsed}
-        onClick={toggleLeft}
-        className={cn(!leftCollapsed && "bg-accent-subtle text-accent")}
-      >
-        <PanelLeft className="h-4 w-4" />
-      </Button>
-
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label={rightCollapsed ? "Open right panel" : "Close right panel"}
-        aria-pressed={!rightCollapsed}
-        onClick={toggleRight}
-        className={cn(!rightCollapsed && "bg-accent-subtle text-accent")}
-      >
-        <PanelRight className="h-4 w-4" />
-      </Button>
-
       <div className="flex-1" />
 
-      <Button variant="ghost" size="sm" onClick={toggleRight}>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={toggleRight}
+        aria-pressed={!rightCollapsed}
+        className={cn(!rightCollapsed && "bg-accent-subtle text-accent")}
+      >
         <Sparkles className="h-3.5 w-3.5" />
         AI Assistant
       </Button>

@@ -9,6 +9,17 @@ import { ExplorerContextMenuTrigger } from "./ExplorerContextMenu";
 import type { ExplorerEndpoint } from "./Explorer.types";
 
 /**
+ * Public prop shape for the standalone `ExplorerEndpoint` row.
+ * Exported separately so consumers can pass the data through without
+ * importing the (currently named-identically) data type.
+ */
+export interface ExplorerEndpointProps {
+  endpoint: ExplorerEndpoint;
+  selected?: boolean;
+  onActivate?: (endpoint: ExplorerEndpoint) => void;
+}
+
+/**
  * Single HTTP operation row inside a tag folder.
  *
  * Layout:
@@ -18,16 +29,16 @@ import type { ExplorerEndpoint } from "./Explorer.types";
  *   └────────────────────────────────────────────────────────────┘
  *
  * Visual states: idle, hover, focus, selected.
+ *
+ * Kept for backward compatibility — the tree now renders rows via
+ * `ExplorerNode`, but this component is still useful when an endpoint
+ * needs to appear outside the tree (search results, context menus).
  */
 export function ExplorerEndpoint({
   endpoint,
   selected,
   onActivate,
-}: {
-  endpoint: ExplorerEndpoint;
-  selected?: boolean;
-  onActivate?: (endpoint: ExplorerEndpoint) => void;
-}): React.ReactElement {
+}: ExplorerEndpointProps): React.ReactElement {
   const label = methodLabel(endpoint.method);
   return (
     <button

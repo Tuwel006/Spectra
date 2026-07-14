@@ -10,25 +10,21 @@ import { ExplorerFooter } from "./ExplorerFooter";
 import { ExplorerHeader } from "./ExplorerHeader";
 import { ExplorerSearch } from "./ExplorerSearch";
 import { ExplorerTree } from "./ExplorerTree";
-import type { ExplorerProps } from "./Explorer.types";
-import {
-  DEFAULT_DOCUMENTATION,
-  useExplorerState,
-} from "./Explorer.utils";
-import { useEndpointTabs } from "@/components/workspace/workspace.store";
-import { endpointToTab } from "@/components/workspace/workspace.types";
+import { useExplorer } from "./hooks/useExplorer";
+import { useExplorerSearch } from "./hooks/useExplorerSearch";
+import type { ExplorerProps } from "./types/ExplorerState";
 
 /**
  * Sidebar-wide explorer.
  *
  * Renders the full vertical stack: header → search → tree → footer.
- * All state (search query, expanded sections, selected row) lives in
- * `useExplorerState` so consumers can lift it later via prop callbacks
- * without rewriting the components.
+ * State lives in two hooks:
+ *   • `useExplorer`       — query, expanded sections, folder toggles
+ *   • `useExplorerSearch` — applies the live filter to the tree
  *
- * Mounting is gated by a `useEffect` to avoid hydration mismatches:
- * the tree on the server reflects the default fold state while the
- * client reads `localStorage`. Same pattern as the application shell.
+ * Splitting them keeps the tree component free of search logic and
+ * lets future contributors plug in debounced / fuzzy search without
+ * touching the surrounding UI.
  */
 export function Explorer({
   documentation,
@@ -39,37 +35,37 @@ export function Explorer({
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
 
-  const state = useExplorerState(documentation ?? DEFAULT_DOCUMENTATION);
-  const openTab = useEndpointTabs((s) => s.openTab);
+  const state = useExplorer(documentation);
+  const search = useExplorerSearch(state.tree, state.query);
 
-  const handleActivate = React.useCallback(
-    (ep: Parameters<NonNullable<ExplorerProps["onEndpointSelect"]>>[0]) => {
-      openTab(endpointToTab(ep));
-      onEndpointSelect?.(ep);
-    },
-    [openTab, onEndpointSelect],
-  );
-
-  // On the very first paint (SSR or hydration) we render a static shell
-  // identical to the one before the state hook attaches. This avoids the
-  // "tree hydrated but some attributes of the server rendered HTML
-  // didn't match" warning.
+  // On the very first paint (SSR or hydration) we render a static
+  // shell identical to the one before the state hook attaches.
   if (!mounted) {
     return (
       <ExplorerShell className={className}>
-        <ExplorerHeader title="Explorer" subtitle="Studio" actions={headerActions} />
+        <ExplorerHeader
+          title="Explorer"
+          subtitle="Studio"
+          documentation={documentation}
+          actions={headerActions}
+        />
         <ExplorerSearch value="" onChange={() => undefined} />
         <div className="flex flex-1 items-center justify-center px-4">
           <ExplorerEmpty />
         </div>
-        <ExplorerFooter endpointCount={0} pathCount={0} />
+        <ExplorerFooter endpointCount={0} pathCount={0} version={documentation?.metadata?.version} />
       </ExplorerShell>
     );
   }
 
   return (
     <ExplorerShell className={className}>
-      <ExplorerHeader title="Explorer" subtitle="Studio" actions={headerActions} />
+      <ExplorerHeader
+        title="Explorer"
+        subtitle="Studio"
+        documentation={state.documentation}
+        actions={headerActions}
+      />
       <ExplorerSearch
         value={state.query}
         onChange={state.setQuery}
@@ -78,15 +74,16 @@ export function Explorer({
       <div className="flex-1 overflow-hidden">
         <ScrollArea className="h-full" orientation="vertical">
           <ExplorerTree
-            tree={state.tree}
+            tree={search.tree}
             state={state}
-            onActivateEndpoint={handleActivate}
+            onActivateEndpoint={onEndpointSelect}
           />
         </ScrollArea>
       </div>
       <ExplorerFooter
-        endpointCount={state.tree.endpointCount}
+        endpointCount={search.endpointCount}
         pathCount={state.tree.pathCount}
+        version={state.documentation.metadata?.version}
       />
     </ExplorerShell>
   );

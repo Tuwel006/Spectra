@@ -10,8 +10,9 @@ import { persist, createJSONStorage } from "zustand/middleware";
  * works in percentages. Collapse state is stored alongside so the shell
  * can render collapsed panels at a fixed narrow width.
  *
- * Persisted to `localStorage` under `spectra.layout.v1` so the user's
- * preferred layout survives reloads.
+ * Persisted to `localStorage` under `spectra.layout.v3` so the user's
+ * preferred layout survives reloads. Bumped from v2 after widening
+ * defaults — older keys with smaller widths are ignored.
  */
 export interface LayoutState {
   /** Width of the left sidebar in % of the horizontal PanelGroup. */
@@ -48,8 +49,6 @@ const clamp = (value: number, min: number, max: number): number => {
  */
 const storage = createJSONStorage<LayoutState>(() => {
   if (typeof window === "undefined") {
-    // No-op storage for SSR. Returning `null` lets `persist` keep its
-    // initial state until hydration on the client.
     return {
       getItem: () => null,
       setItem: () => undefined,
@@ -62,16 +61,22 @@ const storage = createJSONStorage<LayoutState>(() => {
 export const useLayout = create<LayoutState>()(
   persist(
     (set) => ({
-      leftWidth: 22,
-      rightWidth: 22,
-      bottomHeight: 24,
+      // Widened defaults — both sidebars at 26% so every route in the
+      // Explorer / Schemas panel is readable without scrolling, and
+      // the central workspace still has 48% of the viewport.
+      leftWidth: 26,
+      rightWidth: 26,
+      bottomHeight: 28,
 
       leftCollapsed: false,
-      rightCollapsed: true,
+      rightCollapsed: false,
       bottomOpen: false,
 
-      setLeftWidth: (size) => set({ leftWidth: clamp(size, 14, 45) }),
-      setRightWidth: (size) => set({ rightWidth: clamp(size, 18, 45) }),
+      // Wider clamps so the drag handle can both shrink toward the
+      // minimum (14%) and stretch past the default up to 50% on
+      // ultrawide displays.
+      setLeftWidth: (size) => set({ leftWidth: clamp(size, 14, 50) }),
+      setRightWidth: (size) => set({ rightWidth: clamp(size, 14, 50) }),
       setBottomHeight: (size) => set({ bottomHeight: clamp(size, 12, 70) }),
 
       toggleLeft: () => set((s) => ({ leftCollapsed: !s.leftCollapsed })),
@@ -79,11 +84,18 @@ export const useLayout = create<LayoutState>()(
       toggleBottom: () => set((s) => ({ bottomOpen: !s.bottomOpen })),
     }),
     {
-      name: "spectra.layout.v1",
+      name: "spectra.layout.v3",
       storage,
     },
   ),
 );
 
-/** Width, in percent, that a collapsed sidebar rail occupies. */
-export const COLLAPSED_RAIL_SIZE = 2.5;
+/**
+ * Width, in percent, that a collapsed sidebar panel occupies.
+ *
+ * Set to `0` so the panel fully disappears when collapsed — the toggle
+ * button that re-opens it lives in a floating layer over the workspace
+ * (see `SidebarToggle` in `AppLayout.tsx`) rather than inside the panel
+ * itself, so it stays visible regardless of the panel's width.
+ */
+export const COLLAPSED_RAIL_SIZE = 0;

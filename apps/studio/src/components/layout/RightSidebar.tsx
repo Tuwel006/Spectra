@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Sparkles, X } from "lucide-react";
+import { PanelRightClose, Sparkles } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
 import { useLayout } from "@/store/layout";
 
@@ -33,15 +35,17 @@ export function RightSidebar(): React.ReactElement {
           <Sparkles className="h-3.5 w-3.5" />
           AI Assistant
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Close right panel"
-          onClick={toggleRight}
-          className="h-6 w-6"
-        >
-          <X className="h-3.5 w-3.5" />
-        </Button>
+        <Tooltip content="Collapse right panel" side="bottom">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Collapse right panel"
+            onClick={toggleRight}
+            className="h-7 w-7 text-text-secondary hover:bg-accent-subtle hover:text-accent"
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </Button>
+        </Tooltip>
       </div>
 
       <div className="flex flex-1 items-center justify-center px-4">
