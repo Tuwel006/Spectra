@@ -40,7 +40,7 @@ export function WorkspaceTabs(): React.ReactElement | null {
       role="tablist"
       aria-label="Open workspace tabs"
       onKeyDown={handleKey}
-      className="flex h-8 w-full items-stretch overflow-x-auto border-b border-border bg-bg-muted"
+      className="hover-scrollbar flex h-10 w-full min-w-0 flex-nowrap items-stretch overflow-x-auto overflow-y-hidden border-b border-border bg-bg-muted"
     >
       {tabs.map((tab) => (
         <WorkspaceTab

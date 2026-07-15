@@ -10,6 +10,44 @@ import type { Operation } from "@spectra/core";
 import type { WorkspaceTab } from "../types/Workspace";
 
 /* ------------------------------------------------------------------ */
+/* Per-tab UI state                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Collapsible sections inside an endpoint workspace page.
+ *
+ * The names match the design (Documentation / Request / Response).
+ * Each tab carries its own expansion state so switching tabs doesn't
+ * reset what the user was looking at.
+ */
+export type WorkspaceSectionId = "documentation" | "request" | "response";
+
+export interface WorkspaceUiSlice {
+  /** Per-section expand/collapse. */
+  readonly sections: Readonly<Record<WorkspaceSectionId, boolean>>;
+  /** Scroll position (px) preserved per tab — switched tabs snap
+   *  back to where the user left them. */
+  readonly scrollY: number;
+  /** Selected request sub-tab (params / query / headers / …). */
+  readonly requestTab: string;
+  /** Selected response sub-tab (documentation / runtime). */
+  readonly responseTab: string;
+}
+
+function defaultUiSlice(): WorkspaceUiSlice {
+  return {
+    sections: {
+      documentation: true,
+      request: true,
+      response: true,
+    },
+    scrollY: 0,
+    requestTab: "params",
+    responseTab: "documentation",
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* State contract                                                      */
 /* ------------------------------------------------------------------ */
 
@@ -25,13 +63,15 @@ import type { WorkspaceTab } from "../types/Workspace";
  * response / parameter / requestBody / example tabs land in later
  * phases, but their state plumbing is already in place.
  *
- * Persisted to `localStorage` under `spectra.workspace.v2`. SSR is
+ * Persisted to `localStorage` under `spectra.workspace.v3`. SSR is
  * handled with a no-op storage shim and a `useHasMounted()` helper so
  * the server render stays in sync with the first client paint.
  */
 export interface WorkspaceState {
   readonly tabs: readonly WorkspaceTab[];
   readonly activeTabId: string | null;
+  /** Per-tab UI state (expanded sections, scroll, sub-tabs). */
+  readonly ui: Readonly<Record<string, WorkspaceUiSlice>>;
 
   /** Add a tab if no tab exists for the same resource; otherwise just
    *  activate the existing one. Idempotent. */
@@ -43,6 +83,21 @@ export interface WorkspaceState {
   reorderTab: (id: string, toIndex: number) => void;
   setDirty: (id: string, dirty: boolean) => void;
   togglePin: (id: string) => void;
+
+  /** Toggle / set a section's expanded state for a given tab. */
+  setSectionExpanded: (
+    tabId: string,
+    section: WorkspaceSectionId,
+    expanded: boolean,
+  ) => void;
+  toggleSection: (tabId: string, section: WorkspaceSectionId) => void;
+
+  /** Persist scroll position per tab. */
+  setScrollY: (tabId: string, y: number) => void;
+
+  /** Persist the selected request / response sub-tab per tab. */
+  setRequestTab: (tabId: string, requestTab: string) => void;
+  setResponseTab: (tabId: string, responseTab: string) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -93,6 +148,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     (set) => ({
       tabs: [],
       activeTabId: null,
+      ui: {},
 
       openTab: (tab) =>
         set((state) => {
@@ -107,6 +163,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           return {
             tabs: [...state.tabs, tab],
             activeTabId: tab.id,
+            ui: { ...state.ui, [tab.id]: defaultUiSlice() },
           };
         }),
 
@@ -119,7 +176,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           const nextActive = wasActive
             ? pickNextTabId(state.tabs, id)
             : state.activeTabId;
-          return { tabs: nextTabs, activeTabId: nextActive };
+          // Drop the per-tab UI state too so memory doesn't grow.
+          const nextUi = { ...state.ui };
+          delete nextUi[id];
+          return { tabs: nextTabs, activeTabId: nextActive, ui: nextUi };
         }),
 
       activateTab: (id) =>
@@ -139,10 +199,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           ) {
             return state;
           }
-          return { tabs: keep, activeTabId: id };
+          const nextUi: Record<string, WorkspaceUiSlice> = {};
+          if (state.ui[id]) nextUi[id] = state.ui[id]!;
+          return { tabs: keep, activeTabId: id, ui: nextUi };
         }),
 
-      closeAll: () => set({ tabs: [], activeTabId: null }),
+      closeAll: () => set({ tabs: [], activeTabId: null, ui: {} }),
 
       reorderTab: (id, toIndex) =>
         set((state) => {
@@ -178,9 +240,74 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           });
           return changed ? { tabs: nextTabs } : state;
         }),
+
+      setSectionExpanded: (tabId, section, expanded) =>
+        set((state) => {
+          const current = state.ui[tabId] ?? defaultUiSlice();
+          if (current.sections[section] === expanded) return state;
+          return {
+            ui: {
+              ...state.ui,
+              [tabId]: {
+                ...current,
+                sections: { ...current.sections, [section]: expanded },
+              },
+            },
+          };
+        }),
+
+      toggleSection: (tabId, section) =>
+        set((state) => {
+          const current = state.ui[tabId] ?? defaultUiSlice();
+          return {
+            ui: {
+              ...state.ui,
+              [tabId]: {
+                ...current,
+                sections: {
+                  ...current.sections,
+                  [section]: !current.sections[section],
+                },
+              },
+            },
+          };
+        }),
+
+      setScrollY: (tabId, y) =>
+        set((state) => {
+          const current = state.ui[tabId] ?? defaultUiSlice();
+          if (current.scrollY === y) return state;
+          return {
+            ui: { ...state.ui, [tabId]: { ...current, scrollY: y } },
+          };
+        }),
+
+      setRequestTab: (tabId, requestTab) =>
+        set((state) => {
+          const current = state.ui[tabId] ?? defaultUiSlice();
+          if (current.requestTab === requestTab) return state;
+          return {
+            ui: {
+              ...state.ui,
+              [tabId]: { ...current, requestTab },
+            },
+          };
+        }),
+
+      setResponseTab: (tabId, responseTab) =>
+        set((state) => {
+          const current = state.ui[tabId] ?? defaultUiSlice();
+          if (current.responseTab === responseTab) return state;
+          return {
+            ui: {
+              ...state.ui,
+              [tabId]: { ...current, responseTab },
+            },
+          };
+        }),
     }),
     {
-      name: "spectra.workspace.v2",
+      name: "spectra.workspace.v3",
       storage: tabsStorage,
       partialize: (state) => state,
     },
@@ -237,4 +364,13 @@ export function useHasMounted(): boolean {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
   return mounted;
+}
+
+/** Read a tab's UI slice, defaulting to the canonical empty slice. */
+export function getUiSlice(
+  ui: Readonly<Record<string, WorkspaceUiSlice>>,
+  tabId: string | null | undefined,
+): WorkspaceUiSlice {
+  if (!tabId) return defaultUiSlice();
+  return ui[tabId] ?? defaultUiSlice();
 }

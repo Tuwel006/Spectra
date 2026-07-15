@@ -126,7 +126,7 @@ function SidebarActionRow({
   return (
     <div
       className={cn(
-        "flex h-9 shrink-0 items-center gap-1 border-b border-border bg-bg-subtle px-2",
+        "flex h-10 shrink-0 items-center gap-1 border-b border-border bg-bg-subtle px-2",
       )}
     >
       {actions}

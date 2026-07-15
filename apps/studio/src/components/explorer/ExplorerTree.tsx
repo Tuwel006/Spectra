@@ -53,7 +53,7 @@ export function ExplorerTree({
 
   return (
     <div
-      className="flex flex-col divide-y divide-border overflow-y-auto"
+      className="hover-scrollbar flex flex-col divide-y divide-border overflow-y-auto"
       role="tree"
       aria-label="API explorer"
     >

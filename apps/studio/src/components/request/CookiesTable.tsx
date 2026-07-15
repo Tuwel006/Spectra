@@ -2,10 +2,13 @@
 
 import * as React from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useRequestDraftStore } from "./request.store";
+
+const EMPTY: readonly never[] = [];
 
 /**
  * Simple key/value table for cookies. Mock documentation rarely
@@ -17,7 +20,9 @@ export function CookiesTable({
 }: {
   endpointId: string;
 }): React.ReactElement {
-  const rows = useRequestDraftStore((s) => s.drafts[endpointId]?.cookies ?? []);
+  const rows = useRequestDraftStore(
+    useShallow((s) => s.drafts[endpointId]?.cookies ?? EMPTY),
+  );
   const patch = useRequestDraftStore((s) => s.patchDraft);
 
   const update = (id: string, partial: Partial<(typeof rows)[number]>) => {

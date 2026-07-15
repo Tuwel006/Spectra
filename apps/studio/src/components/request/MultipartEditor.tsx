@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { FileUp, Plus, Trash2 } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,6 +11,8 @@ import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/cn";
 import { formatBytes, type MultipartField } from "./request.types";
 import { useRequestDraftStore } from "./request.store";
+
+const EMPTY: readonly never[] = [];
 
 /**
  * Multipart form-data editor. Supports text fields, file fields, and a
@@ -22,7 +25,7 @@ export function MultipartEditor({
   endpointId: string;
 }): React.ReactElement {
   const fields = useRequestDraftStore(
-    (s) => s.drafts[endpointId]?.multipartFields ?? [],
+    useShallow((s) => s.drafts[endpointId]?.multipartFields ?? EMPTY),
   );
   const patch = useRequestDraftStore((s) => s.patchDraft);
   const [dragOver, setDragOver] = React.useState(false);

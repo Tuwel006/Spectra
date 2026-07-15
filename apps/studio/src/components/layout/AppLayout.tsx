@@ -122,7 +122,7 @@ function AppLayoutShell({
         >
           <Group
             orientation="horizontal"
-            className="h-full overflow-hidden"
+            className="h-full min-w-0 overflow-hidden"
           >
             <SidebarPanel
               side="left"
@@ -144,7 +144,7 @@ function AppLayoutShell({
             <Panel
               id="workspace"
               minSize={30}
-              className="relative flex flex-col overflow-hidden"
+              className="relative flex min-w-0 max-w-full flex-col overflow-hidden"
             >
               <MainWorkspace />
               {children}

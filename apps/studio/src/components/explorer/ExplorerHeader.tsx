@@ -26,19 +26,19 @@ export function ExplorerHeader({
   actions?: React.ReactNode;
 }): React.ReactElement {
   return (
-    <div className="flex h-12 shrink-0 flex-col justify-center gap-0.5 border-b border-border bg-bg-subtle px-3">
-      <div className="flex items-center justify-between gap-2">
+    <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-bg-subtle px-3">
+      <div className="flex min-w-0 items-center gap-2">
         <span className="truncate text-sm font-semibold text-text-primary">
           {title}
         </span>
-        {actions ? (
-          <div className="flex shrink-0 items-center gap-1">{actions}</div>
+        {typeof endpointCount === "number" ? (
+          <span className={cn("shrink-0 text-[11px] font-medium text-text-muted")}>
+            {endpointCount} {endpointCount === 1 ? "Endpoint" : "Endpoints"}
+          </span>
         ) : null}
       </div>
-      {typeof endpointCount === "number" ? (
-        <span className={cn("text-[11px] font-medium text-text-muted")}>
-          {endpointCount} {endpointCount === 1 ? "Endpoint" : "Endpoints"}
-        </span>
+      {actions ? (
+        <div className="flex shrink-0 items-center gap-1">{actions}</div>
       ) : null}
     </div>
   );

@@ -2,11 +2,14 @@
 
 import * as React from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 import { useRequestDraftStore } from "./request.store";
+
+const EMPTY: readonly never[] = [];
 
 /**
  * Path parameters table.
@@ -23,7 +26,9 @@ export function PathParamsTable({
 }: {
   endpointId: string;
 }): React.ReactElement {
-  const rows = useRequestDraftStore((s) => s.drafts[endpointId]?.pathParams ?? []);
+  const rows = useRequestDraftStore(
+    useShallow((s) => s.drafts[endpointId]?.pathParams ?? EMPTY),
+  );
   const patch = useRequestDraftStore((s) => s.patchDraft);
 
   const update = (id: string, partial: Partial<(typeof rows)[number]>) => {

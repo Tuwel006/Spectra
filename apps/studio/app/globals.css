@@ -121,6 +121,44 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 9999px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
+/* ── Hover-reveal scrollbar ──
+   Used by the workspace tab strip and any other horizontal/vertical
+   scroller that should stay invisible until the user actually hovers
+   it. The scrollbar still works the same; it just doesn't steal
+   height from the surrounding layout.
+
+   Implementation: hide the scrollbar completely by default
+   (scrollbar-width: none + width: 0 on webkit). On hover, restore a
+   thin 6px bar. The element never reserves gutter space when not
+   hovered, so the tab row keeps its full height. */
+.hover-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.hover-scrollbar::-webkit-scrollbar { width: 0; height: 0; background: transparent; }
+.hover-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.hover-scrollbar::-webkit-scrollbar-thumb { background: transparent; }
+
+.hover-scrollbar:hover,
+.hover-scrollbar:focus-within,
+.hover-scrollbar:active {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.hover-scrollbar:hover::-webkit-scrollbar,
+.hover-scrollbar:focus-within::-webkit-scrollbar,
+.hover-scrollbar:active::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.hover-scrollbar:hover::-webkit-scrollbar-thumb,
+.hover-scrollbar:focus-within::-webkit-scrollbar-thumb,
+.hover-scrollbar:active::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 9999px;
+  transition: background-color 120ms ease-out;
+}
+.hover-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
 /* ── Selection ── */
 ::selection { background: var(--accent-subtle); color: var(--accent); }
 

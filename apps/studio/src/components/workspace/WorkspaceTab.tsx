@@ -79,7 +79,7 @@ function WorkspaceTabInner({
       data-active={active || undefined}
       data-pinned={tab.pinned || undefined}
       className={cn(
-        "group/tab relative flex h-8 max-w-[200px] min-w-[140px] flex-1 cursor-pointer items-center gap-1.5 border-r border-border px-2.5 text-left",
+        "group/tab relative flex h-10 w-[180px] shrink-0 grow basis-[180px] cursor-pointer items-center gap-1.5 border-r border-border px-2.5 text-left",
         "transition-colors",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
         active

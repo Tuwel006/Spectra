@@ -3,6 +3,7 @@
 import * as React from "react";
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { useShallow } from "zustand/react/shallow";
 
 import type {
   ResponseInfoTab,
@@ -180,12 +181,18 @@ export const useResponseViewerStore = create<ResponseViewerState>()(
 /**
  * Subscribe to a single endpoint's response viewer slice. Returns the
  * default slice on the server so SSR doesn't ship a stale row.
+ *
+ * Uses `useShallow` so the snapshot reference is stable across renders.
+ * Without it, the `emptySlice()` fallback returns a new object on every
+ * selector call and Zustand's `Object.is` check loops forever.
  */
 export function useResponseSlice(
   endpointId: string | undefined,
 ): ResponseViewerSlice {
-  return useResponseViewerStore((state) =>
-    endpointId ? state.slices[endpointId] ?? emptySlice() : emptySlice(),
+  return useResponseViewerStore(
+    useShallow((state) =>
+      endpointId ? state.slices[endpointId] ?? emptySlice() : emptySlice(),
+    ),
   );
 }
 

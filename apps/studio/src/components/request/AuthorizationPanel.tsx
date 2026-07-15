@@ -2,12 +2,15 @@
 
 import * as React from "react";
 import { KeySquare, Lock, ShieldCheck, User } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 
 import { Input } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
-import type { AuthType } from "./request.types";
+import type { AuthConfig, AuthType } from "./request.types";
 import { useRequestDraftStore } from "./request.store";
 import { cn } from "@/lib/cn";
+
+const DEFAULT_AUTH: AuthConfig = { type: "no-auth", apiKeyIn: "header" };
 
 /**
  * Authorization configuration panel.
@@ -24,7 +27,7 @@ export function AuthorizationPanel({
   endpointId: string;
 }): React.ReactElement {
   const auth = useRequestDraftStore(
-    (s) => s.drafts[endpointId]?.authorization ?? { type: "no-auth", apiKeyIn: "header" },
+    useShallow((s) => s.drafts[endpointId]?.authorization ?? DEFAULT_AUTH),
   );
   const patch = useRequestDraftStore((s) => s.patchDraft);
 

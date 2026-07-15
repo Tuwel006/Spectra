@@ -13,6 +13,13 @@ export {
   EndpointOverview,
   readOperationTagsAndAuth,
 } from "./EndpointOverview";
+export { EndpointWorkspace } from "./EndpointWorkspace";
+export { EndpointHeader } from "./EndpointHeader";
+export { DocumentationSection } from "./DocumentationSection";
+export { RequestSection } from "./RequestSection";
+export { ResponseSection } from "./ResponseSection";
+export { CollapsibleSection } from "./CollapsibleSection";
+export { openResource, resolveResourceTitle } from "./openResource";
 
 /* ------------------------------------------------------------------ */
 /* Hooks                                                               */
@@ -32,6 +39,11 @@ export {
   useWorkspaceStore,
   resolveOperation,
   useHasMounted,
+  getUiSlice,
+} from "./store/workspaceStore";
+export type {
+  WorkspaceSectionId,
+  WorkspaceUiSlice,
 } from "./store/workspaceStore";
 
 /* ------------------------------------------------------------------ */

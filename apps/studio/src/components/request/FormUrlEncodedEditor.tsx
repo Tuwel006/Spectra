@@ -2,12 +2,15 @@
 
 import * as React from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 import { useRequestDraftStore } from "./request.store";
+
+const EMPTY: readonly never[] = [];
 
 /**
  * URL-encoded (key=value) editor. Same shape as
@@ -19,7 +22,7 @@ export function FormUrlEncodedEditor({
   endpointId: string;
 }): React.ReactElement {
   const rows = useRequestDraftStore(
-    (s) => s.drafts[endpointId]?.urlEncoded ?? [],
+    useShallow((s) => s.drafts[endpointId]?.urlEncoded ?? EMPTY),
   );
   const patch = useRequestDraftStore((s) => s.patchDraft);
 
