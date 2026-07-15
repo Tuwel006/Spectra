@@ -4,18 +4,20 @@ import * as React from "react";
 
 import { cn } from "@/lib/cn";
 
-import { EndpointTabs } from "./tabs/EndpointTabs";
-import { useEndpointTabs, useHasMounted } from "./workspace.store";
+import { useWorkspace } from "./hooks/useWorkspace";
+import { useHasMounted } from "./store/workspaceStore";
 import { WorkspaceContent } from "./WorkspaceContent";
 import { WorkspaceEmpty } from "./WorkspaceEmpty";
 import { WorkspaceHeader } from "./WorkspaceHeader";
+import { WorkspaceTabs } from "./WorkspaceTabs";
 
 /**
  * Top-level workspace. Composes:
- *   • {@link WorkspaceHeader}   toolbar (sidebar toggles, AI assistant)
- *   • {@link EndpointTabs}      chrome-style tab strip
- *   • {@link WorkspaceEmpty}    when no tabs are open
- *   • {@link WorkspaceContent}  when at least one tab is active
+ *   • {@link WorkspaceHeader}   empty for now — sidebar toggles moved
+ *                               into the sidebars themselves
+ *   • {@link WorkspaceTabs}     VS Code style tab strip
+ *   • {@link WorkspaceEmpty}    welcome screen when no tabs are open
+ *   • {@link WorkspaceContent}  endpoint overview when a tab is active
  *
  * Mount-flag pattern: the tab strip and content are gated on
  * `useHasMounted()` so SSR and the very first client paint stay
@@ -26,8 +28,7 @@ export function Workspace({ className }: {
   className?: string;
 }): React.ReactElement {
   const mounted = useHasMounted();
-  const tabs = useEndpointTabs((s) => s.tabs);
-  const hasTabs = mounted && tabs.length > 0;
+  const { tabs, isEmpty } = useWorkspace();
 
   return (
     <section
@@ -39,12 +40,12 @@ export function Workspace({ className }: {
     >
       <WorkspaceHeader />
 
-      {/* Mounted-only chrome — keeps SSR markup identical to first
+      {/* Mounted-only chrome — keeps SSR markup identical to the first
           client render. */}
-      {mounted && tabs.length > 0 ? <EndpointTabs /> : null}
+      {mounted && tabs.length > 0 ? <WorkspaceTabs /> : null}
 
       <div className="flex-1 overflow-hidden">
-        {hasTabs ? <WorkspaceContent /> : <WorkspaceEmpty />}
+        {mounted && !isEmpty ? <WorkspaceContent /> : <WorkspaceEmpty />}
       </div>
     </section>
   );

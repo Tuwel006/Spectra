@@ -1,63 +1,61 @@
-import * as React from "react";
-import { AlertTriangle, Lock, Tag as TagIcon, KeySquare } from "lucide-react";
+"use client";
 
-import { Badge } from "@/components/ui/badge";
-import { MethodBadge } from "@/components/ui/badge";
+import * as React from "react";
+import {
+  AlertTriangle,
+  KeySquare,
+  Lock,
+  Tag as TagIcon,
+} from "lucide-react";
+
+import { Badge, MethodBadge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
-import type { EndpointTabItem } from "./workspace.types";
+import type { HttpMethod, Operation } from "@spectra/core";
 
 /**
- * Renders the metadata block above the workspace body for a single
- * endpoint tab. Pure presentation — the data has already been resolved
- * by the parent.
+ * Renders the metadata block for an active endpoint tab.
  *
- * <p>
- *   Sources come from the underlying {@link Operation}:
- * </p>
- *   • {@link Operation.method}, {@link Operation.url} for the title row
- *   • {@link Operation.summary} for the one-liner under the path
- *   • {@link Operation.description} for the long-form prose
- *   • {@link Operation.operationId} for the developer-facing identifier
- *   • `extensions["x-tags"]` for tag chips
- *   • `extensions["x-security"]` for the auth badge
+ * <p>Data sources come from:</p>
+ *   • The {@link Operation} for `summary`, `description`, `operationId`
+ *   • `operation.extensions["x-tags"]` for tag chips
+ *   • `operation.extensions["x-security"]` for the auth badge
+ *   • The caller for `method` and `url` (the explorer owns the URL)
  *
- * Deprecation detection falls back to `extensions["x-deprecated"]` or
- * the conventional `deprecated: true` flag — the mock doesn't set it,
- * but the surrounding UI is ready when it does.
+ * This is the read-only "Endpoint Overview" surface — request/response
+ * editors are intentionally out of scope for this phase.
  */
-export function EndpointHeader({
-  tab,
-  endpointSummary,
-  endpointDescription,
-  operationId,
-  tags,
-  security,
-  deprecated,
-}: {
-  tab: EndpointTabItem;
-  endpointSummary: string | undefined;
-  endpointDescription: string | undefined;
-  operationId: string | undefined;
-  tags: readonly string[];
-  security: "BearerAuth" | "None" | "Unknown";
-  deprecated: boolean;
-}): React.ReactElement {
+export interface EndpointOverviewProps {
+  method: HttpMethod;
+  url: string;
+  operation: Operation;
+  className?: string;
+}
+
+export function EndpointOverview({
+  method,
+  url,
+  operation,
+  className,
+}: EndpointOverviewProps): React.ReactElement {
+  const meta = readOperationTagsAndAuth(operation);
+
   return (
     <div
       className={cn(
-        "flex flex-col gap-4 border-b border-border bg-bg-subtle px-6 py-5",
+        "flex flex-col gap-5 overflow-y-auto bg-bg-base px-6 py-5",
+        className,
       )}
     >
-      {/* Title row: method badge + URL + state badges */}
+      {/* Title row */}
       <div className="flex flex-wrap items-center gap-2.5">
         <MethodBadge
-          method={tab.method as Parameters<typeof MethodBadge>[0]["method"]}
+          method={method as Parameters<typeof MethodBadge>[0]["method"]}
           size="md"
         />
         <h1 className="break-all font-mono text-base font-semibold text-text-primary">
-          {tab.url}
+          {url}
         </h1>
-        {deprecated ? (
+        {meta.deprecated ? (
           <Badge tone="warning" size="md" className="gap-1">
             <AlertTriangle className="h-3 w-3" aria-hidden="true" />
             Deprecated
@@ -66,35 +64,35 @@ export function EndpointHeader({
       </div>
 
       {/* Summary */}
-      {endpointSummary ? (
+      {operation.summary ? (
         <p className="text-sm font-medium leading-relaxed text-text-primary">
-          {endpointSummary}
+          {operation.summary}
         </p>
       ) : null}
 
       {/* Description */}
-      {endpointDescription ? (
-        <p className="max-w-3xl text-sm leading-relaxed text-text-secondary">
-          {endpointDescription}
+      {operation.description ? (
+        <p className="max-w-3xl whitespace-pre-line text-sm leading-relaxed text-text-secondary">
+          {operation.description}
         </p>
       ) : null}
 
-      {/* Tag + auth meta */}
-      <dl className="grid w-full grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-        {operationId ? (
+      {/* Metadata grid */}
+      <dl className="grid w-full grid-cols-1 gap-x-8 gap-y-3 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-3">
+        {operation.operationId ? (
           <Field label="Operation ID">
             <code className="font-mono text-xs text-text-primary">
-              {operationId}
+              {operation.operationId}
             </code>
           </Field>
         ) : null}
 
-        {tags.length > 0 ? (
+        {meta.tags.length > 0 ? (
           <Field label="Tags">
             <div className="flex flex-wrap gap-1.5">
-              {tags.map((tag) => (
-                <Badge key={tag} tone="accent" size="sm">
-                  <TagIcon className="mr-1 h-3 w-3" aria-hidden="true" />
+              {meta.tags.map((tag) => (
+                <Badge key={tag} tone="accent" size="sm" className="gap-1">
+                  <TagIcon className="h-3 w-3" aria-hidden="true" />
                   {tag}
                 </Badge>
               ))}
@@ -103,12 +101,12 @@ export function EndpointHeader({
         ) : null}
 
         <Field label="Authentication">
-          {security === "BearerAuth" ? (
+          {meta.security === "BearerAuth" ? (
             <Badge tone="info" size="sm" className="gap-1">
               <KeySquare className="h-3 w-3" aria-hidden="true" />
               Bearer JWT
             </Badge>
-          ) : security === "None" ? (
+          ) : meta.security === "None" ? (
             <span className="inline-flex items-center gap-1 text-xs text-text-muted">
               <Lock className="h-3 w-3" aria-hidden="true" />
               No authentication required
@@ -121,6 +119,10 @@ export function EndpointHeader({
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                              */
+/* ------------------------------------------------------------------ */
 
 function Field({
   label,
@@ -140,8 +142,11 @@ function Field({
 }
 
 /**
- * Pull auth + tag data out of an `Operation.extensions` blob. Kept as a
- * free function so the workspace content can call it directly.
+ * Pull auth + tag data out of an `Operation.extensions` blob.
+ *
+ * `x-security` accepts `string` (BearerAuth by convention), `null`
+ * (explicitly anonymous) or any other value (Unknown — the UI shows a
+ * neutral label so users notice missing security metadata).
  */
 export function readOperationTagsAndAuth(op: {
   readonly extensions?: Record<string, unknown>;

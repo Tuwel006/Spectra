@@ -7,7 +7,11 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { mockDocumentation } from "@/mock/documentation";
 import type { Operation } from "@spectra/core";
 
-import type { EndpointTabItem } from "./workspace.types";
+import type { WorkspaceTab } from "../types/Workspace";
+
+/* ------------------------------------------------------------------ */
+/* State contract                                                      */
+/* ------------------------------------------------------------------ */
 
 /**
  * Workspace tab store.
@@ -16,15 +20,22 @@ import type { EndpointTabItem } from "./workspace.types";
  * matches the visible order. Mutators keep the `activeTabId` invariant
  * — it always references an id that's currently in `tabs`.
  *
- * Persisted to `localStorage` under `spectra.tabs.v1`. SSR is handled
- * with a no-op storage shim and a `useHasMounted()` helper so the
- * server render stays in sync with the first client paint.
+ * Resource types are deliberately generic on the `WorkspaceTab`
+ * discriminator. Today only `endpoint` resources produce tabs; schema /
+ * response / parameter / requestBody / example tabs land in later
+ * phases, but their state plumbing is already in place.
+ *
+ * Persisted to `localStorage` under `spectra.workspace.v2`. SSR is
+ * handled with a no-op storage shim and a `useHasMounted()` helper so
+ * the server render stays in sync with the first client paint.
  */
-export interface EndpointTabsState {
-  readonly tabs: readonly EndpointTabItem[];
+export interface WorkspaceState {
+  readonly tabs: readonly WorkspaceTab[];
   readonly activeTabId: string | null;
 
-  openTab: (tab: EndpointTabItem) => void;
+  /** Add a tab if no tab exists for the same resource; otherwise just
+   *  activate the existing one. Idempotent. */
+  openTab: (tab: WorkspaceTab) => void;
   closeTab: (id: string) => void;
   activateTab: (id: string) => void;
   closeOthers: (id: string) => void;
@@ -34,8 +45,12 @@ export interface EndpointTabsState {
   togglePin: (id: string) => void;
 }
 
+/* ------------------------------------------------------------------ */
+/* SSR-safe persistence                                                 */
+/* ------------------------------------------------------------------ */
+
 /** SSR-safe localStorage shim — returns `null` server-side. */
-const tabsStorage = createJSONStorage<EndpointTabsState>(() => {
+const tabsStorage = createJSONStorage<WorkspaceState>(() => {
   if (typeof window === "undefined") {
     return {
       getItem: () => null,
@@ -46,6 +61,10 @@ const tabsStorage = createJSONStorage<EndpointTabsState>(() => {
   return window.localStorage;
 });
 
+/* ------------------------------------------------------------------ */
+/* Helpers                                                             */
+/* ------------------------------------------------------------------ */
+
 /**
  * Pick the next active tab after closing one.
  *
@@ -54,7 +73,7 @@ const tabsStorage = createJSONStorage<EndpointTabsState>(() => {
  *   • Otherwise → the right neighbour (like Chrome / VS Code)
  */
 function pickNextTabId(
-  tabs: readonly EndpointTabItem[],
+  tabs: readonly WorkspaceTab[],
   closedId: string,
 ): string | null {
   if (tabs.length === 0) return null;
@@ -65,7 +84,11 @@ function pickNextTabId(
   return tabs[idx + 1]!.id;
 }
 
-export const useEndpointTabs = create<EndpointTabsState>()(
+/* ------------------------------------------------------------------ */
+/* Store                                                               */
+/* ------------------------------------------------------------------ */
+
+export const useWorkspaceStore = create<WorkspaceState>()(
   persist(
     (set) => ({
       tabs: [],
@@ -73,10 +96,12 @@ export const useEndpointTabs = create<EndpointTabsState>()(
 
       openTab: (tab) =>
         set((state) => {
-          // Idempotent — clicking an already-open endpoint just makes
+          // Idempotent — clicking an already-open resource just makes
           // its tab active.
           const existing = state.tabs.find(
-            (t) => t.endpointId === tab.endpointId,
+            (t) =>
+              t.resourceType === tab.resourceType &&
+              t.resourceId === tab.resourceId,
           );
           if (existing) return { activeTabId: existing.id };
           return {
@@ -155,10 +180,8 @@ export const useEndpointTabs = create<EndpointTabsState>()(
         }),
     }),
     {
-      name: "spectra.tabs.v1",
+      name: "spectra.workspace.v2",
       storage: tabsStorage,
-      // Persist the whole state. `dirty` already defaults to `false`
-      // so this doesn't capture stale unsaved indicators across reloads.
       partialize: (state) => state,
     },
   ),
@@ -182,17 +205,6 @@ function getOperationIds(): ReadonlySet<string> {
   return ids;
 }
 
-/**
- * Filter a persisted tab list against the currently-known operations.
- * Used in `hydrate` so a hard refresh keeps only valid tabs.
- */
-export function pruneStaleTabs(
-  tabs: readonly EndpointTabItem[],
-): readonly EndpointTabItem[] {
-  const ids = getOperationIds();
-  return tabs.filter((t) => ids.has(t.endpointId));
-}
-
 /** Resolve an operation by id from the bundled documentation. */
 const operationByIdCache = new Map<string, Operation | undefined>();
 export function resolveOperation(endpointId: string): Operation | undefined {
@@ -213,7 +225,7 @@ export function resolveOperation(endpointId: string): Operation | undefined {
 }
 
 /* ------------------------------------------------------------------ */
-/* Hydration helper                                                   */
+/* Hooks                                                               */
 /* ------------------------------------------------------------------ */
 
 /**

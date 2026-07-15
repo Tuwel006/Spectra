@@ -1,61 +1,112 @@
+"use client";
+
 import * as React from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { MethodBadge } from "@/components/ui/badge";
+import { useWorkspaceStore } from "@/components/workspace";
 import { cn } from "@/lib/cn";
 
 /* ------------------------------------------------------------------ */
-/* Static section data (TODOs)                                         */
+/* Pinned list — derived from the workspace store                      */
 /* ------------------------------------------------------------------ */
 
-type MethodKey = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-
-export const PINNED_ITEMS: readonly { method: MethodKey; path: string }[] = [
-  { method: "GET", path: "/users/{id}" },
-  { method: "POST", path: "/auth/login" },
-  { method: "GET", path: "/dashboard/stats" },
-];
-// TODO: replace with real favorites from a store.
-
-export const RECENT_ITEMS: readonly { method: MethodKey; path: string; ago: string }[] = [
-  { method: "GET", path: "/orders/{id}", ago: "2m ago" },
-  { method: "GET", path: "/products", ago: "15m ago" },
-  { method: "POST", path: "/users", ago: "1h ago" },
-];
-// TODO: replace with real recent-history from a store.
-
-/* ------------------------------------------------------------------ */
-/* Pinned list                                                         */
-/* ------------------------------------------------------------------ */
-
+/**
+ * Renders the workspace's pinned tabs inside the Explorer.
+ *
+ * Pinned tabs live in the workspace store; the Explorer doesn't own
+ * them. We subscribe via `useWorkspaceStore` so a `togglePin` from the
+ * tab strip immediately updates this list — no manual refresh.
+ *
+ * Uses `useShallow` so the filtered array reference is stable across
+ * renders. Without it, `s.tabs.filter(...)` returns a new array on
+ * every selector call and Zustand's `Object.is` snapshot check loops
+ * forever ("Maximum update depth exceeded").
+ */
 export function PinnedList(): React.ReactElement {
+  const pinnedTabs = useWorkspaceStore(
+    useShallow((s) => s.tabs.filter((t) => t.pinned)),
+  );
+
+  if (pinnedTabs.length === 0) {
+    return (
+      <div
+        role="group"
+        className="flex flex-col px-5 py-3 text-[11px] italic leading-relaxed text-text-muted"
+      >
+        Pin an open tab to see it here.
+      </div>
+    );
+  }
+
   return (
     <div role="group" className="flex flex-col">
-      {PINNED_ITEMS.map((item, idx) => (
-        <StaticMethodRow
-          key={`pinned-${item.method}-${item.path}-${idx}`}
-          method={item.method}
-          path={item.path}
-        />
-      ))}
+      {pinnedTabs.map((tab) => {
+        if (!tab.method || !tab.url) {
+          // Skip non-endpoint tabs for now — the resource-type union
+          // includes schema / response / …, none of which have an HTTP
+          // method today.
+          return null;
+        }
+        return (
+          <StaticMethodRow
+            key={tab.id}
+            method={narrowMethod(tab.method)}
+            path={tab.url}
+            title={tab.title}
+          />
+        );
+      })}
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* Recent list                                                         */
+/* Recent list — derived from the workspace store                      */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Renders the most recently opened tabs in reverse chronological
+ * order. The "Recently Opened" surface in the Explorer is read-only
+ * today; the data flows from the workspace store.
+ *
+ * `useShallow` keeps the `s.tabs` snapshot stable so the downstream
+ * `useMemo` doesn't re-derive on every render.
+ */
 export function RecentList(): React.ReactElement {
+  const recentTabs = useWorkspaceStore(useShallow((s) => s.tabs));
+
+  // Tabs are stored in insertion order. The most recent opens are at
+  // the end of the list — reverse so the latest one is at the top.
+  const ordered = React.useMemo(
+    () => [...recentTabs].reverse().slice(0, 8),
+    [recentTabs],
+  );
+
+  if (ordered.length === 0) {
+    return (
+      <div
+        role="group"
+        className="flex flex-col px-5 py-3 text-[11px] italic leading-relaxed text-text-muted"
+      >
+        Open an endpoint to see it here.
+      </div>
+    );
+  }
+
   return (
     <div role="group" className="flex flex-col">
-      {RECENT_ITEMS.map((item, idx) => (
-        <StaticMethodRow
-          key={`recent-${item.method}-${item.path}-${idx}`}
-          method={item.method}
-          path={item.path}
-          trailing={item.ago}
-        />
-      ))}
+      {ordered.map((tab) => {
+        if (!tab.method || !tab.url) return null;
+        return (
+          <StaticMethodRow
+            key={tab.id}
+            method={narrowMethod(tab.method)}
+            path={tab.url}
+            title={tab.title}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -64,19 +115,42 @@ export function RecentList(): React.ReactElement {
 /* Row                                                                 */
 /* ------------------------------------------------------------------ */
 
+/**
+ * `MethodBadge` accepts a narrow subset of `HttpMethod` — TRACE and
+ * CONNECT fall back to `OPTIONS` here so the badge stays renderable
+ * for non-standard APIs without changing the row's appearance.
+ */
+function narrowMethod(
+  method: Parameters<typeof MethodBadge>[0]["method"] | string,
+): Parameters<typeof MethodBadge>[0]["method"] {
+  switch (method) {
+    case "GET":
+    case "POST":
+    case "PUT":
+    case "PATCH":
+    case "DELETE":
+    case "HEAD":
+    case "OPTIONS":
+      return method;
+    default:
+      return "OPTIONS";
+  }
+}
+
 function StaticMethodRow({
   method,
   path,
-  trailing,
+  title,
 }: {
-  method: MethodKey;
+  method: Parameters<typeof MethodBadge>[0]["method"];
   path: string;
-  /** Optional right-aligned muted text (e.g. "2m ago"). */
-  trailing?: string;
+  /** Optional tooltip text — usually the tab summary. */
+  title?: string;
 }): React.ReactElement {
   return (
     <button
       type="button"
+      title={title}
       className={cn(
         "group flex w-full items-center gap-2 py-1 pr-3 text-left",
         "text-xs text-text-secondary",
@@ -89,11 +163,6 @@ function StaticMethodRow({
         <span className="truncate font-mono text-[11px] text-text-primary">
           {path}
         </span>
-        {trailing ? (
-          <span className="ml-auto shrink-0 text-[10px] text-text-muted">
-            {trailing}
-          </span>
-        ) : null}
       </span>
     </button>
   );

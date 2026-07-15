@@ -1,17 +1,13 @@
 import * as React from "react";
 import { History, Layers, Pin } from "lucide-react";
 
+import { useWorkspaceStore } from "@/components/workspace";
 import { cn } from "@/lib/cn";
 
 import { ExplorerEmpty } from "./ExplorerEmpty";
 import { ExplorerNode } from "./ExplorerNode";
 import { ExplorerSection } from "./ExplorerSection";
-import {
-  PinnedList,
-  RecentList,
-  PINNED_ITEMS,
-  RECENT_ITEMS,
-} from "./ExplorerStaticRows";
+import { PinnedList, RecentList } from "./ExplorerStaticRows";
 import { EXPLORER_SECTION } from "./types/ExplorerNode";
 import type { ExplorerState } from "./types/ExplorerState";
 import type {
@@ -41,6 +37,13 @@ export function ExplorerTree({
   state: ExplorerState;
   onActivateEndpoint?: (endpoint: ExplorerEndpoint) => void;
 }): React.ReactElement {
+  // Subscribe to the workspace store so the Pinned / Recent counts and
+  // contents update live whenever tabs are opened, closed, or pinned.
+  const pinnedCount = useWorkspaceStore(
+    (s) => s.tabs.filter((t) => t.pinned).length,
+  );
+  const recentCount = useWorkspaceStore((s) => s.tabs.length);
+
   const isFiltering = state.query.trim().length > 0;
   const totallyEmpty = tree.api.length === 0;
 
@@ -69,7 +72,7 @@ export function ExplorerTree({
         id={EXPLORER_SECTION.Favorites}
         title="Pinned"
         icon={<Pin className="h-3 w-3" />}
-        count={PINNED_ITEMS.length}
+        count={pinnedCount}
         open={state.expandedSections.has(EXPLORER_SECTION.Favorites)}
         onToggle={() => state.toggleSection(EXPLORER_SECTION.Favorites)}
       >
@@ -80,7 +83,7 @@ export function ExplorerTree({
         id={EXPLORER_SECTION.Recent}
         title="Recently Opened"
         icon={<History className="h-3 w-3" />}
-        count={RECENT_ITEMS.length}
+        count={recentCount}
         open={state.expandedSections.has(EXPLORER_SECTION.Recent)}
         onToggle={() => state.toggleSection(EXPLORER_SECTION.Recent)}
       >

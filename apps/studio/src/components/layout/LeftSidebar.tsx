@@ -6,6 +6,8 @@ import { Menu, Save, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Explorer } from "@/components/explorer";
+import { endpointToTab, useWorkspace } from "@/components/workspace";
+import type { ExplorerEndpoint } from "@/components/explorer";
 import { useLayout } from "@/store/layout";
 import { cn } from "@/lib/cn";
 
@@ -22,13 +24,28 @@ import { cn } from "@/lib/cn";
  *   │  Footer                              │
  *   └──────────────────────────────────────┘
  *
- * The action row sits above the explorer so the icons stay accessible
- * even when the explorer scrolls. Collapse lives here too — the
- * collapse button inside the explorer header is kept as a duplicate so
- * users can collapse from either surface.
+ * Activating an endpoint in the explorer opens a tab in the workspace
+ * via the generic workspace store. The explorer never imports the
+ * store directly — it just emits `onEndpointSelect`, and this
+ * composition layer maps the explorer payload into a workspace tab.
  */
 export function LeftSidebar(): React.ReactElement {
   const { toggleLeft } = useLayout();
+  const { openTab } = useWorkspace();
+
+  const handleEndpointSelect = React.useCallback(
+    (endpoint: ExplorerEndpoint) => {
+      openTab(
+        endpointToTab({
+          endpointId: endpoint.id,
+          title: endpoint.summary ?? prettify(endpoint.url),
+          method: endpoint.method,
+          url: endpoint.url,
+        }),
+      );
+    },
+    [openTab],
+  );
 
   return (
     <div className={cn("flex h-full min-h-0 flex-col bg-bg-subtle text-text-primary")}>
@@ -76,9 +93,20 @@ export function LeftSidebar(): React.ReactElement {
         }
       />
 
-      <Explorer className="min-h-0 flex-1" />
+      <Explorer
+        className="min-h-0 flex-1"
+        onEndpointSelect={handleEndpointSelect}
+      />
     </div>
   );
+}
+
+/**
+ * Strip `{` `}` braces and leading slashes from a URL so it reads like
+ * a friendly endpoint title (e.g. `/users/{id}` → `users/id`).
+ */
+function prettify(url: string): string {
+  return url.replace(/[{}]/g, "").replace(/^\/+/, "");
 }
 
 /* ------------------------------------------------------------------ */

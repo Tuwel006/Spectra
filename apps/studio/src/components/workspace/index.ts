@@ -1,18 +1,46 @@
+/* ------------------------------------------------------------------ */
+/* Components                                                          */
+/* ------------------------------------------------------------------ */
+
 export { Workspace } from "./Workspace";
 export { WorkspaceHeader } from "./WorkspaceHeader";
 export { WorkspaceEmpty } from "./WorkspaceEmpty";
 export { WorkspaceContent } from "./WorkspaceContent";
-export { EndpointHeader, readOperationTagsAndAuth } from "./EndpointHeader";
-export { EndpointTabs } from "./tabs/EndpointTabs";
+export { WorkspaceTabs } from "./WorkspaceTabs";
+export { WorkspaceTab } from "./WorkspaceTab";
+export type { WorkspaceTabProps } from "./WorkspaceTab";
 export {
-  useEndpointTabs,
-  resolveOperation,
-  pruneStaleTabs,
-  useHasMounted,
-} from "./workspace.store";
+  EndpointOverview,
+  readOperationTagsAndAuth,
+} from "./EndpointOverview";
+
+/* ------------------------------------------------------------------ */
+/* Hooks                                                               */
+/* ------------------------------------------------------------------ */
+
+export { useWorkspace, useResolvedWorkspaceTab } from "./hooks/useWorkspace";
 export type {
-  EndpointTabItem,
-  ResolvedEndpoint,
-  WorkspaceProps,
-} from "./workspace.types";
-export { endpointToTab } from "./workspace.types";
+  UseWorkspaceResult,
+  UseResolvedWorkspaceTabResult,
+} from "./hooks/useWorkspace";
+
+/* ------------------------------------------------------------------ */
+/* Store                                                               */
+/* ------------------------------------------------------------------ */
+
+export {
+  useWorkspaceStore,
+  resolveOperation,
+  useHasMounted,
+} from "./store/workspaceStore";
+
+/* ------------------------------------------------------------------ */
+/* Types                                                               */
+/* ------------------------------------------------------------------ */
+
+export type {
+  WorkspaceTab as WorkspaceTabData,
+  WorkspaceResourceType,
+  ResolvedWorkspaceTab,
+} from "./types/Workspace";
+export { endpointToTab } from "./types/Workspace";
