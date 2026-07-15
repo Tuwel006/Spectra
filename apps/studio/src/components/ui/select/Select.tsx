@@ -13,6 +13,10 @@ const sizeMap: Record<NonNullable<SelectProps["size"]>, string> = {
  * Native `<select>` wrapped with consistent studio styling.
  *
  * For richer filtering / async search, use {@link Combobox} instead.
+ *
+ * Width defaults to `w-fit` so a bare `<Select>` takes only as much
+ * horizontal room as its label + chevron need. Consumers that want a
+ * stretched select can pass `w-full` explicitly through `className`.
  */
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
   {
@@ -32,15 +36,19 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   return (
     <span
       className={cn(
-        "relative inline-flex w-full items-center rounded-md border bg-bg-base",
+        "relative inline-flex items-center rounded-md border bg-bg-base",
         sizeMap[size],
         invalid ? "border-method-delete" : "border-border",
-        "focus-within:ring-2 focus-within:ring-accent/40",
+        "focus-within:border-accent focus-within:ring-1 focus-within:ring-accent",
         "disabled:cursor-not-allowed disabled:opacity-50",
+        // Opt-in full width only when the consumer explicitly asks for it.
+        className?.includes("w-full") ? "w-full" : "w-fit",
       )}
     >
       {leadingIcon && (
-        <span className="pointer-events-none absolute left-2.5 text-text-muted">{leadingIcon}</span>
+        <span className="pointer-events-none absolute left-2.5 text-text-muted">
+          {leadingIcon}
+        </span>
       )}
       <select
         ref={ref}
@@ -51,6 +59,10 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         className={cn(
           "h-full w-full appearance-none bg-transparent pr-7 text-text-primary focus:outline-none disabled:cursor-not-allowed",
           leadingIcon ? "pl-8" : "pl-3",
+          // Force the native option list to honour the design tokens in
+          // both light and dark themes — without this the dropdown is
+          // white-on-white in dark mode on Chromium-based browsers.
+          "[&>option]:bg-bg-base [&>option]:text-text-primary",
           className,
         )}
         {...props}

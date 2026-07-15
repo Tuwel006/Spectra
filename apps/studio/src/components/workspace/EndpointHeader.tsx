@@ -14,40 +14,18 @@ import {
 import { Button } from "@/components/ui/button";
 import { MethodBadge } from "@/components/ui/badge";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
 import { mockDocumentation } from "@/mock/documentation";
-import type { HttpMethod, Operation } from "@spectra/core";
+import type { Operation } from "@spectra/core";
 
-import { EnvironmentSelector } from "@/components/request/EnvironmentSelector";
+import { useRequestDraftStore } from "@/components/request";
+
 import { useWorkspace } from "./hooks/useWorkspace";
 import { readOperationTagsAndAuth } from "./EndpointOverview";
-
-/* ------------------------------------------------------------------ */
-/* URL resolution                                                      */
-/* ------------------------------------------------------------------ */
-
-/**
- * Look up the path URL for a given operation. The mock documentation
- * stores `Path.url` separately from `Operation` — we walk every path
- * once and cache the result so subsequent lookups are O(1).
- */
-const opUrlCache = new Map<string, string>();
-function resolveOperationUrl(opId: string): string {
-  const cached = opUrlCache.get(opId);
-  if (cached) return cached;
-  for (const path of Object.values(mockDocumentation.paths)) {
-    for (const op of Object.values(path.operations)) {
-      if (op?.id === opId) {
-        opUrlCache.set(opId, path.url);
-        return path.url;
-      }
-    }
-  }
-  opUrlCache.set(opId, "");
-  return "";
-}
+import { useEndpointUrl } from "./useEndpointUrl";
 
 /* ------------------------------------------------------------------ */
 /* Component                                                           */
@@ -57,23 +35,25 @@ function resolveOperationUrl(opId: string): string {
  * The endpoint header sits at the top of the workspace page. It exposes
  * everything the spec calls for:
  *
- *   • Method badge + URL row (with Copy + Run placeholders)
- *   • Servers dropdown
- *   • Pin / Share actions
- *   • Summary, description, tags, authentication, operationId
+ *   • Method badge + server selector + URL input + Run button
+ *     (Postman-style row)
+ *   • Copy URL, Pin, Share actions
+ *   • Summary, description, Tags, Authentication, Operation ID
  *   • Deprecated badge
  *
- * All data is pulled from the resolved `Operation`. The Pin button
- * toggles the tab's `pinned` flag in the workspace store.
+ * The URL input is live-derived from the request draft. Typing into
+ * the path / query params updates the URL automatically; editing the
+ * URL input directly writes back to the path / query params so the
+ * two surfaces stay in sync.
  */
 export function EndpointHeader({
   operation,
 }: {
   operation: Operation;
 }): React.ReactElement {
-  const url = resolveOperationUrl(operation.id);
   const { activeTab, togglePin } = useWorkspace();
   const isPinned = activeTab?.pinned ?? false;
+  const { url, path, serverUrl } = useEndpointUrl(operation);
 
   const [copied, setCopied] = React.useState(false);
   const handleCopy = React.useCallback(async () => {
@@ -94,37 +74,19 @@ export function EndpointHeader({
   }));
 
   return (
-    <div className="flex flex-col gap-4 border-b border-border bg-bg-subtle px-6 py-5">
-      {/* Row 1: method + URL + actions */}
-      <div className="flex flex-wrap items-center gap-2">
-        <MethodBadge
-          method={method as Parameters<typeof MethodBadge>[0]["method"]}
-          size="md"
-        />
-        <h1 className="break-all font-mono text-base font-semibold text-text-primary">
-          {url}
-        </h1>
-        {meta.deprecated ? (
-          <Badge tone="warning" size="md" className="gap-1">
-            <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-            Deprecated
-          </Badge>
-        ) : null}
-      </div>
-
-      {/* Row 2: actions — server picker, copy, run, pin, share */}
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-col gap-3 border-b border-border bg-bg-subtle px-6 py-4">
+      {/* Row 1: Server dropdown (left) | Copy / Pin / Share (right) */}
+      <div className="flex flex-nowrap items-center gap-2">
         <Select
           size="sm"
-          className="w-44"
+          className="min-w-[180px]"
           defaultValue={serverOptions[0]?.value}
           options={serverOptions}
           aria-label="Server"
           leadingIcon={<Link2 className="h-3.5 w-3.5" aria-hidden="true" />}
         />
-        <EnvironmentSelector />
 
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <Tooltip content={copied ? "Copied!" : "Copy URL"} side="bottom">
             <Button
               variant="ghost"
@@ -181,76 +143,226 @@ export function EndpointHeader({
               <span>Share</span>
             </Button>
           </Tooltip>
-
-          <Tooltip content="Send request — execution lands in a later phase.">
-            <Button
-              variant="primary"
-              size="sm"
-              disabled
-              leadingIcon={<Send className="h-3.5 w-3.5" />}
-              aria-label="Send request"
-              className="h-7"
-            >
-              Run
-            </Button>
-          </Tooltip>
         </div>
       </div>
 
-      {/* Row 3: summary / description / metadata */}
-      {operation.summary ? (
-        <p className="text-sm font-medium leading-relaxed text-text-primary">
-          {operation.summary}
-        </p>
-      ) : null}
-      {operation.description ? (
-        <p className="max-w-3xl whitespace-pre-line text-sm leading-relaxed text-text-secondary">
-          {operation.description}
-        </p>
-      ) : null}
+      {/* Row 2: Method | URL input | Send */}
+      <UrlBar
+        method={method}
+        url={url}
+        path={path}
+        serverUrl={serverUrl}
+        endpointId={operation.id}
+      />
 
-      {/* Row 4: meta grid (tags / auth / operationId / servers) */}
-      <dl className="grid w-full grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-        {operation.operationId ? (
-          <MetaField label="Operation ID">
-            <code className="font-mono text-xs text-text-primary">
-              {operation.operationId}
-            </code>
-          </MetaField>
-        ) : null}
-
-        {meta.tags.length > 0 ? (
-          <MetaField label="Tags">
-            <div className="flex flex-wrap gap-1.5">
-              {meta.tags.map((tag) => (
-                <Badge key={tag} tone="accent" size="sm">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-          </MetaField>
-        ) : null}
-
-        <MetaField label="Authentication">
-          {meta.security === "BearerAuth" ? (
-            <Badge tone="info" size="sm">
-              Bearer JWT
-            </Badge>
-          ) : meta.security === "None" ? (
-            <span className="text-xs text-text-muted">
-              No authentication required
-            </span>
-          ) : (
-            <span className="text-xs text-text-muted">Not specified</span>
-          )}
-        </MetaField>
-      </dl>
+      {/* Summary / description / metadata now live in the right-side
+          Properties drawer. Header is intentionally chrome-only. */}
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* Helpers                                                              */
+/* URL bar                                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Method + Server + URL + Run row.
+ *
+ * `url` is the live, fully-substituted URL (see `useEndpointUrl`). The
+ * input is a controlled view over it — when the user types into the
+ * input we re-parse the value and split the edits between the path
+ * template (uncovered) and the query string. The result is that the
+ * URL field shows the rendered URL while the draft store still owns
+ * the canonical source of truth.
+ */
+function UrlBar({
+  method,
+  url,
+  path,
+  serverUrl,
+  endpointId,
+}: {
+  method: Operation["method"];
+  url: string;
+  path: string;
+  serverUrl: string;
+  endpointId: string;
+}): React.ReactElement {
+  const [draftUrl, setDraftUrl] = React.useState(url);
+
+  // Keep the input in sync when the live URL changes from the draft
+  // (typing in path / query params) — but only when the input isn't
+  // currently being edited.
+  const [editing, setEditing] = React.useState(false);
+  React.useEffect(() => {
+    if (!editing) setDraftUrl(url);
+  }, [url, editing]);
+
+  const handleChange = React.useCallback(
+    (next: string) => {
+      setDraftUrl(next);
+      // Best-effort sync: parse the input back into the draft.
+      syncUrlToDraft(next, serverUrl, path, endpointId);
+    },
+    [serverUrl, path, endpointId],
+  );
+
+  // Single-row layout — Method · URL · Send. The URL input grows to
+  // fill the remaining space but never below ~280px so very long
+  // paths stay readable without forcing the row to wrap. Method and
+  // URL share a connected border so they read as one control; the
+  // Send button sits in its own slot with a clear gap.
+  return (
+    <div className="flex flex-nowrap items-stretch gap-2.5">
+      {/* Connected method + URL control */}
+      <div
+        className={cn(
+          "group flex min-w-[280px] flex-1 items-stretch overflow-hidden rounded-md border border-border bg-bg-base transition-colors",
+          "focus-within:border-accent focus-within:ring-1 focus-within:ring-accent",
+        )}
+      >
+        <MethodBadge
+          method={method as Parameters<typeof MethodBadge>[0]["method"]}
+          size="md"
+          className="h-9 shrink-0 rounded-none border-0 border-r border-border bg-bg-subtle px-2.5 text-text-primary group-focus-within:border-accent"
+        />
+        <Input
+          size="md"
+          value={draftUrl}
+          onChange={(e) => handleChange(e.currentTarget.value)}
+          onFocus={() => setEditing(true)}
+          onBlur={() => setEditing(false)}
+          placeholder="https://api.example.com/path"
+          leadingIcon={<Link2 className="h-3.5 w-3.5" aria-hidden="true" />}
+          aria-label="Request URL"
+          wrapperClassName="min-h-0 h-9 flex-1 rounded-none border-0 bg-transparent font-mono focus-within:ring-0 focus-within:border-transparent"
+          className="min-h-0 h-full"
+        />
+      </div>
+
+      <Tooltip content="Send request — execution lands in a later phase.">
+        <Button
+          variant="primary"
+          size="md"
+          disabled
+          leadingIcon={<Send className="h-3.5 w-3.5" />}
+          aria-label="Send request"
+          className="h-9 shrink-0"
+        >
+          Send
+        </Button>
+      </Tooltip>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* URL → draft sync                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Parse a free-form URL the user typed into the URL bar and write the
+ * recoverable bits back into the request draft. We can't always round-
+ * trip the path (the user might have replaced `{id}` with something
+ * the schema doesn't recognise) so we do best-effort:
+ *   • Strip the server base
+ *   • Split path / query
+ *   • For every `{var}` still in the path template, look for a
+ *     matching value in the typed path (segment-by-segment, no fuzzy
+ *     matching) and write it back to the draft
+ *   • Parse the query string and upsert each pair into the draft
+ */
+function syncUrlToDraft(
+  next: string,
+  serverUrl: string,
+  path: string,
+  endpointId: string,
+): void {
+  const store = useRequestDraftStore.getState();
+  const draft = store.drafts[endpointId];
+  if (!draft) return;
+
+  const base = stripTrailingSlash(serverUrl);
+  let tail = next.startsWith(base) ? next.slice(base.length) : next;
+
+  const qIndex = tail.indexOf("?");
+  let typedPath = tail;
+  let typedQuery = "";
+  if (qIndex >= 0) {
+    typedPath = tail.slice(0, qIndex);
+    typedQuery = tail.slice(qIndex + 1);
+  }
+
+  // 1. Path params — only update values that match a known token.
+  const pathTemplate = path.split("?")[0]!;
+  const templateSegs = pathTemplate.split("/").filter(Boolean);
+  const typedSegs = typedPath.split("/").filter(Boolean);
+  const nextPathParams = [...draft.pathParams];
+  for (let i = 0; i < templateSegs.length; i++) {
+    const tpl = templateSegs[i]!;
+    const m = /^\{([^}]+)\}$/.exec(tpl);
+    if (!m) continue;
+    const key = m[1]!;
+    const value = typedSegs[i] ?? "";
+    const idx = nextPathParams.findIndex((r) => r.name === key);
+    if (idx >= 0) {
+      nextPathParams[idx] = { ...nextPathParams[idx]!, value: decode(value) };
+    } else {
+      nextPathParams.push({
+        id: `pp-${key}`,
+        name: key,
+        value: decode(value),
+        type: "string",
+        required: false,
+        enabled: true,
+      });
+    }
+  }
+  store.patchDraft(endpointId, "pathParams", nextPathParams);
+
+  // 2. Query params — upsert into the existing list.
+  const nextQueryParams = [...draft.queryParams];
+  if (typedQuery.length > 0) {
+    const pairs = typedQuery.split("&");
+    for (const pair of pairs) {
+      if (!pair) continue;
+      const eq = pair.indexOf("=");
+      const name = eq >= 0 ? decode(pair.slice(0, eq)) : decode(pair);
+      const value = eq >= 0 ? decode(pair.slice(eq + 1)) : "";
+      const idx = nextQueryParams.findIndex(
+        (r) => r.name === name && r.enabled,
+      );
+      if (idx >= 0) {
+        nextQueryParams[idx] = { ...nextQueryParams[idx]!, value, enabled: true };
+      } else {
+        nextQueryParams.push({
+          id: `qp-${name}`,
+          name,
+          value,
+          type: "string",
+          required: false,
+          enabled: true,
+        });
+      }
+    }
+  }
+  store.patchDraft(endpointId, "queryParams", nextQueryParams);
+}
+
+function decode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
+function stripTrailingSlash(s: string): string {
+  return s.endsWith("/") ? s.slice(0, -1) : s;
+}
+
+/* ------------------------------------------------------------------ */
+/* Meta field                                                          */
 /* ------------------------------------------------------------------ */
 
 function MetaField({
@@ -269,7 +381,3 @@ function MetaField({
     </div>
   );
 }
-
-// Re-export so the workspace can pass the right HttpMethod narrowed
-// type into MethodBadge without duplicating the union.
-export type { HttpMethod };

@@ -32,6 +32,8 @@ export interface WorkspaceUiSlice {
   readonly requestTab: string;
   /** Selected response sub-tab (documentation / runtime). */
   readonly responseTab: string;
+  /** Whether the right-side Properties drawer is open. */
+  readonly drawerOpen: boolean;
 }
 
 function defaultUiSlice(): WorkspaceUiSlice {
@@ -44,6 +46,7 @@ function defaultUiSlice(): WorkspaceUiSlice {
     scrollY: 0,
     requestTab: "params",
     responseTab: "documentation",
+    drawerOpen: true,
   };
 }
 
@@ -98,6 +101,9 @@ export interface WorkspaceState {
   /** Persist the selected request / response sub-tab per tab. */
   setRequestTab: (tabId: string, requestTab: string) => void;
   setResponseTab: (tabId: string, responseTab: string) => void;
+
+  /** Open / close the right-side Properties drawer per tab. */
+  setDrawerOpen: (tabId: string, open: boolean) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -302,6 +308,18 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             ui: {
               ...state.ui,
               [tabId]: { ...current, responseTab },
+            },
+          };
+        }),
+
+      setDrawerOpen: (tabId, open) =>
+        set((state) => {
+          const current = state.ui[tabId] ?? defaultUiSlice();
+          if (current.drawerOpen === open) return state;
+          return {
+            ui: {
+              ...state.ui,
+              [tabId]: { ...current, drawerOpen: open },
             },
           };
         }),

@@ -2,17 +2,7 @@
 
 import * as React from "react";
 import { useShallow } from "zustand/react/shallow";
-
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs } from "@/components/ui/tabs";
-import {
-  Code2,
-  Cookie,
-  FileText,
-  KeyRound,
-  ListTree,
-  Settings2,
-} from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 import {
   AuthorizationPanel,
@@ -22,64 +12,29 @@ import {
   QueryParamsTable,
   RequestBody,
   emptyDraft,
+  initializeDraftFromOperation,
   useDraft,
   useRequestDraftStore,
   useRequestMounted,
-  initializeDraftFromOperation,
 } from "@/components/request";
 
 import { useWorkspaceStore } from "./store/workspaceStore";
 import { CollapsibleSection } from "./CollapsibleSection";
+import { cn } from "@/lib/cn";
 import type { Operation } from "@spectra/core";
-
-/**
- * Sub-tab identifiers for the request editor. Matches the spec layout
- * (Params, Query, Headers, Authorization, Cookies, Body).
- */
-export type RequestSubTab =
-  | "params"
-  | "query"
-  | "headers"
-  | "authorization"
-  | "cookies"
-  | "body";
-
-const SUB_TAB_ORDER: readonly RequestSubTab[] = [
-  "params",
-  "query",
-  "headers",
-  "authorization",
-  "cookies",
-  "body",
-];
-
-const SUB_TAB_LABEL: Record<RequestSubTab, string> = {
-  params: "Params",
-  query: "Query",
-  headers: "Headers",
-  authorization: "Authorization",
-  cookies: "Cookies",
-  body: "Body",
-};
-
-const SUB_TAB_ICON: Record<RequestSubTab, React.ReactNode> = {
-  params: <Code2 className="h-3 w-3" aria-hidden />,
-  query: <ListTree className="h-3 w-3" aria-hidden />,
-  headers: <Settings2 className="h-3 w-3" aria-hidden />,
-  authorization: <KeyRound className="h-3 w-3" aria-hidden />,
-  cookies: <Cookie className="h-3 w-3" aria-hidden />,
-  body: <FileText className="h-3 w-3" aria-hidden />,
-};
 
 /* ------------------------------------------------------------------ */
 /* Section                                                             */
 /* ------------------------------------------------------------------ */
 
 /**
- * The Request section. Hosts the path / query / headers / auth /
- * cookies / body sub-tabs and wires each to the matching table from
- * `@/components/request`. Per-tab sub-tab selection lives in the
- * workspace store so switching tabs doesn't reset the user's place.
+ * The Request section. Renders the request side of the endpoint as a
+ * single collapsible section whose body is a vertical stack of
+ * parameter sub-sections — Params, Headers, Query, Cookies, Body, and
+ * Authorization — each rendered one after another like the screenshot.
+ *
+ * Each sub-section has its own expand/collapse toggle. Per-section
+ * state lives locally so toggling one row doesn't ripple to the rest.
  */
 export function RequestSection({
   tabId,
@@ -102,28 +57,10 @@ export function RequestSection({
     ensureDraft(endpointId);
   }, [ensureDraft, endpointId]);
 
-  // Per-tab sub-tab selection.
-  const requestTab = useWorkspaceStore(
-    (s) => s.ui[tabId]?.requestTab ?? "params",
-  );
-  const setRequestTab = useWorkspaceStore((s) => s.setRequestTab);
-
   const sectionExpanded = useWorkspaceStore(
     (s) => s.ui[tabId]?.sections.request ?? true,
   );
   const toggleSection = useWorkspaceStore((s) => s.toggleSection);
-
-  // Counts drive the badges in the sub-tab strip.
-  const draft =
-    useDraft(mounted ? endpointId : undefined) ?? emptyDraft();
-  const enabledHeaders = useShallowVal(
-    mounted ? endpointId : undefined,
-    (d) => d.headers.filter((h) => h.enabled).length,
-  );
-  const enabledQuery = useShallowVal(
-    mounted ? endpointId : undefined,
-    (d) => d.queryParams.filter((p) => p.enabled).length,
-  );
 
   return (
     <CollapsibleSection
@@ -131,77 +68,111 @@ export function RequestSection({
       title="Request"
       open={sectionExpanded}
       onToggle={() => toggleSection(tabId, "request")}
-      toolbar={
-        <Tabs
-          value={requestTab}
-          onChange={(v) => setRequestTab(tabId, v as string)}
-          items={SUB_TAB_ORDER.map((id) => ({
-            id,
-            label: (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="text-text-muted">{SUB_TAB_ICON[id]}</span>
-                {SUB_TAB_LABEL[id]}
-                {id === "headers" && enabledHeaders > 0 ? (
-                  <span className="rounded bg-accent px-1 text-[9px] font-medium text-accent-fg">
-                    {enabledHeaders}
-                  </span>
-                ) : null}
-                {id === "query" && enabledQuery > 0 ? (
-                  <span className="rounded bg-accent px-1 text-[9px] font-medium text-accent-fg">
-                    {enabledQuery}
-                  </span>
-                ) : null}
-                {id === "cookies" && draft.cookies.length > 0 ? (
-                  <span className="rounded bg-accent px-1 text-[9px] font-medium text-accent-fg">
-                    {draft.cookies.length}
-                  </span>
-                ) : null}
-              </span>
-            ),
-          }))}
-        />
-      }
     >
-      <div className="min-h-[200px]">
-        <ScrollArea className="h-full max-h-[60vh]" orientation="vertical">
-          {requestTab === "params" ? (
-            <PathParamsTable endpointId={endpointId} />
-          ) : null}
-          {requestTab === "query" ? (
-            <QueryParamsTable endpointId={endpointId} />
-          ) : null}
-          {requestTab === "headers" ? (
-            <HeadersTable endpointId={endpointId} />
-          ) : null}
-          {requestTab === "authorization" ? (
-            <AuthorizationPanel endpointId={endpointId} />
-          ) : null}
-          {requestTab === "cookies" ? (
-            <CookiesTable endpointId={endpointId} />
-          ) : null}
-          {requestTab === "body" ? <RequestBody endpointId={endpointId} /> : null}
-        </ScrollArea>
+      <div className="flex flex-col divide-y divide-border">
+        <ParamSubSection
+          id={`params-${tabId}`}
+          title="Params"
+          defaultOpen
+        >
+          <PathParamsTable endpointId={endpointId} />
+        </ParamSubSection>
+
+        <ParamSubSection id={`headers-${tabId}`} title="Headers">
+          <HeadersTable endpointId={endpointId} />
+        </ParamSubSection>
+
+        <ParamSubSection id={`query-${tabId}`} title="Query">
+          <QueryParamsTable endpointId={endpointId} />
+        </ParamSubSection>
+
+        <ParamSubSection id={`cookies-${tabId}`} title="Cookies">
+          <CookiesTable endpointId={endpointId} />
+        </ParamSubSection>
+
+        <ParamSubSection id={`auth-${tabId}`} title="Authorization">
+          <AuthorizationPanel endpointId={endpointId} />
+        </ParamSubSection>
+
+        <ParamSubSection id={`body-${tabId}`} title="Body">
+          <RequestBody endpointId={endpointId} operation={operation} />
+        </ParamSubSection>
       </div>
     </CollapsibleSection>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* Helpers                                                              */
+/* Sub-section                                                         */
 /* ------------------------------------------------------------------ */
 
 /**
- * Tiny hook that subscribes to a derived count via `useShallow` so
- * the snapshot stays referentially stable across renders.
+ * One stacked sub-section inside the Request block. Each has its own
+ * open/closed toggle so users can collapse the rows they're not
+ * editing. Default state is closed except for Params, which is the most
+ * common editing target.
  */
-function useShallowVal(
-  endpointId: string | undefined,
-  pick: (draft: ReturnType<typeof emptyDraft>) => number,
-): number {
-  return useRequestDraftStore(
-    useShallow((s) => {
-      const d = endpointId ? s.drafts[endpointId] : undefined;
-      return d ? pick(d) : 0;
-    }),
+function ParamSubSection({
+  id,
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  id: string;
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}): React.ReactElement {
+  const [open, setOpen] = React.useState(defaultOpen);
+  return (
+    <section className="flex flex-col" aria-labelledby={`${id}-title`}>
+      <header
+        className={cn(
+          "flex h-8 shrink-0 items-center gap-1.5 px-4",
+          "bg-bg-base",
+        )}
+      >
+        <button
+          type="button"
+          id={`${id}-trigger`}
+          aria-expanded={open}
+          aria-controls={`${id}-panel`}
+          onClick={() => setOpen((v) => !v)}
+          className={cn(
+            "flex items-center gap-1.5",
+            "text-[11px] font-semibold uppercase tracking-wider text-text-secondary",
+            "transition-colors hover:text-text-primary",
+          )}
+        >
+          {open ? (
+            <ChevronDown
+              className="h-3 w-3 text-text-muted"
+              aria-hidden
+            />
+          ) : (
+            <ChevronRight
+              className="h-3 w-3 text-text-muted"
+              aria-hidden
+            />
+          )}
+          <span id={`${id}-title`}>{title}</span>
+        </button>
+      </header>
+      <div
+        id={`${id}-panel`}
+        role="region"
+        aria-labelledby={`${id}-title`}
+        hidden={!open}
+        className={cn("flex flex-col", open ? "" : "h-0")}
+      >
+        {open ? children : null}
+      </div>
+    </section>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* Re-export for downstream tests / wrappers                           */
+/* ------------------------------------------------------------------ */
+
+export { useShallow };

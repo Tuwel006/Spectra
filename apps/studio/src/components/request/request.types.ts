@@ -8,6 +8,7 @@ import type {
 /* ------------------------------------------------------------------ */
 
 export const BODY_TYPES = [
+  "smart-form",
   "json",
   "raw",
   "xml",
@@ -20,6 +21,7 @@ export const BODY_TYPES = [
 export type BodyType = (typeof BODY_TYPES)[number];
 
 export const BODY_TYPE_LABEL: Record<BodyType, string> = {
+  "smart-form": "Smart Form",
   json: "JSON",
   raw: "Raw Text",
   xml: "XML",
@@ -30,6 +32,7 @@ export const BODY_TYPE_LABEL: Record<BodyType, string> = {
 };
 
 export const BODY_TYPE_CONTENT_TYPE: Record<BodyType, string> = {
+  "smart-form": "application/json",
   json: "application/json",
   raw: "text/plain",
   xml: "application/xml",
@@ -329,17 +332,18 @@ export function draftFromOperation(op: Operation): RequestDraft {
     });
   }
 
-  // Pick a sensible default body. JSON if the schema is referenced,
-  // otherwise none.
+  // Pick a sensible default body. Smart Form when a JSON schema is
+  // available (so users get a generated form out of the box), with
+  // a fallback to raw JSON when no schema reference exists.
   const bodyType: BodyType = hints.bodyContentTypes.includes("application/json")
-    ? "json"
+    ? "smart-form"
     : hints.contentType === "multipart/form-data"
       ? "form-data"
       : hints.contentType === "application/x-www-form-urlencoded"
         ? "url-encoded"
         : hints.contentType === "application/xml"
           ? "xml"
-          : "json";
+          : "smart-form";
 
   return {
     pathParams: hints.pathParams.map((p) => ({
