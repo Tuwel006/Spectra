@@ -149,7 +149,7 @@ function AppLayoutShell({
               <MainWorkspace />
               {children}
 
-              {/* Floating toggle buttons — only visible while a
+              {/* Floating toggle — only visible while the left
                   sidebar is hidden so the user can re-open it. */}
               {layout.leftCollapsed ? (
                 <SidebarToggle
@@ -158,28 +158,15 @@ function AppLayoutShell({
                   onToggle={layout.toggleLeft}
                 />
               ) : null}
-              {layout.rightCollapsed ? (
-                <SidebarToggle
-                  side="right"
-                  collapsed
-                  onToggle={layout.toggleRight}
-                />
-              ) : null}
+
+              {/* Right AI Assistant renders as an OVERLAY drawer so
+                  it never consumes workspace horizontal room. The
+                  toggle lives in the top header. */}
+              <RightDrawerOverlay
+                open={!layout.rightCollapsed}
+                onToggle={layout.toggleRight}
+              />
             </Panel>
-
-            {!layout.rightCollapsed ? (
-              <ResizeHandle ariaLabel="Resize right sidebar" />
-            ) : null}
-
-            <SidebarPanel
-              side="right"
-              collapsed={layout.rightCollapsed}
-              width={layout.rightWidth}
-              minWidth={14}
-              maxWidth={50}
-              onWidthChange={layout.setRightWidth}
-              onToggle={layout.toggleRight}
-            />
           </Group>
         </Panel>
 
@@ -199,6 +186,44 @@ function AppLayoutShell({
 
       {/* Always-visible thin strip even when collapsed */}
       <BottomPanel />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Right AI Assistant drawer overlay                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The AI Assistant panel renders as a fixed overlay that slides in
+ * from the right edge of the viewport. It never claims any of the
+ * workspace's horizontal room; the toggle button lives in the top
+ * header (TopBar) so it's always reachable.
+ *
+ * z-index layout:
+ *   • drawer panel    — z-30
+ *   • workspace       — normal flow
+ *   • toggle button   — lives in TopBar (separate concern)
+ */
+function RightDrawerOverlay({
+  open,
+  onToggle,
+}: {
+  open: boolean;
+  onToggle: () => void;
+}): React.ReactElement {
+  return (
+    <div
+      className={cn(
+        "pointer-events-none fixed inset-y-0 right-0 z-30 w-[320px] max-w-[85vw] border-l border-border bg-bg-subtle shadow-2xl",
+        "transition-transform duration-200 ease-out",
+        open ? "translate-x-0" : "translate-x-full",
+      )}
+      aria-hidden={!open}
+    >
+      <div className="pointer-events-auto flex h-full flex-col">
+        <RightSidebar />
+      </div>
     </div>
   );
 }
@@ -238,7 +263,6 @@ function SidebarPanel({
 
   if (collapsed) {
     return (
-      <>
       <Panel
         id={side}
         key={`${side}-collapsed`}
@@ -248,7 +272,6 @@ function SidebarPanel({
         maxSize={COLLAPSED_RAIL_SIZE}
         className="flex flex-col"
       />
-      </>
     );
   }
 
@@ -260,7 +283,7 @@ function SidebarPanel({
       defaultSize={width.toString() + "%"}
       minSize={minWidth.toString() + "%"}
       maxSize={maxWidth.toString() + "%"}
-      onResize={(size) => onWidthChange(size.inPixels)}
+      onResize={(size) => onWidthChange(Number(size))}
       className="flex flex-col"
     >
       {side === "left" ? <LeftSidebar /> : <RightSidebar />}
@@ -330,3 +353,7 @@ function ResizeHandle({ ariaLabel }: { ariaLabel: string }): React.ReactElement 
     />
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* Bottom resize handle                                              */
+/* ------------------------------------------------------------------ */

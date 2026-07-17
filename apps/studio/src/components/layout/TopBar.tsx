@@ -6,7 +6,9 @@ import {
   ChevronDown,
   HelpCircle,
   Hexagon,
+  PanelRightOpen,
   Settings as SettingsIcon,
+  Sparkles,
   Star,
 } from "lucide-react";
 
@@ -17,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import { cn } from "@/lib/cn";
+import { useLayout } from "@/store/layout";
 
 /**
  * Single, full-width app header.
@@ -40,10 +43,12 @@ import { cn } from "@/lib/cn";
  * `<button>` and trigger a React hydration warning.
  */
 export function TopBar(): React.ReactElement {
+  const { rightCollapsed, toggleRight } = useLayout();
+
   return (
     <header
       className={cn(
-        "flex h-12 shrink-0 items-center gap-2 border-b border-border bg-bg-subtle px-3",
+        "flex h-12 min-w-0 shrink-0 items-center gap-2 overflow-x-hidden border-b border-border bg-bg-subtle px-3",
       )}
     >
       {/* Brand */}
@@ -101,7 +106,7 @@ export function TopBar(): React.ReactElement {
       </Tooltip>
 
       {/* Global search */}
-      <div className="ml-2 flex max-w-xl flex-1 items-center">
+      <div className="ml-2 flex min-w-0 max-w-xl flex-1 items-center">
         <Input
           variant="search"
           placeholder="Search endpoints, tags, schemas…"
@@ -114,9 +119,9 @@ export function TopBar(): React.ReactElement {
         />
       </div>
 
-      {/* Right cluster */}
-      <div className="flex flex-1 justify-end">
-        <div className="flex items-center gap-1">
+      {/* Right cluster — wrapper pushes inner content to the end,
+          inner holds the actual icon buttons. */}
+      <div className="ml-auto flex shrink-0 items-center gap-1">
           {/* Environment selector */}
           <Dropdown
             align="end"
@@ -165,6 +170,27 @@ export function TopBar(): React.ReactElement {
             ]}
           />
 
+          <Tooltip
+            content={rightCollapsed ? "Show AI Assistant" : "Hide AI Assistant"}
+            side="bottom"
+          >
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Toggle AI Assistant"
+              aria-pressed={!rightCollapsed}
+              onClick={toggleRight}
+              className={cn(
+                "h-7 w-7 shrink-0 transition-colors",
+                !rightCollapsed
+                  ? "bg-accent-subtle text-accent"
+                  : "text-text-secondary hover:bg-bg-muted hover:text-text-primary",
+              )}
+            >
+              <Sparkles className="h-4 w-4" aria-hidden />
+            </Button>
+          </Tooltip>
+
           <TopBarIconButton
             icon={<HelpCircle className="h-4 w-4" aria-hidden />}
             label="Help"
@@ -187,7 +213,6 @@ export function TopBar(): React.ReactElement {
           {/* TODO: open account menu. */}
 
           <ThemeToggle />
-        </div>
       </div>
     </header>
   );

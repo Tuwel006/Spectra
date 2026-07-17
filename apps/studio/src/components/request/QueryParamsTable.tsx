@@ -1,20 +1,22 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { cn } from "@/lib/cn";
 import { useRequestDraftStore } from "./request.store";
+import {
+  FormColumnHeader,
+  FormEmptyState,
+  FormFieldRow,
+} from "./FormFieldRow";
 
 const EMPTY: readonly never[] = [];
 
 /**
- * Query parameters table. Mirror of {@link PathParamsTable} with an
- * extra "Enabled" toggle column.
+ * Query parameters table. Each row has an Enabled toggle and the
+ * standard name / value / type / required / description columns.
  */
 export function QueryParamsTable({
   endpointId,
@@ -59,91 +61,50 @@ export function QueryParamsTable({
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <Header />
+      <FormColumnHeader
+        columns={[
+          { label: "Enabled", width: "28px" },
+          { label: "Name", width: "minmax(140px,1.4fr)" },
+          { label: "Value", width: "minmax(0,1.6fr)" },
+          { label: "Type", width: "80px" },
+          { label: "Required", width: "86px" },
+          { label: "Description", width: "minmax(0,2fr)" },
+          { label: "", width: "32px" },
+        ]}
+      />
       {rows.length === 0 ? (
-        <div className="flex flex-col items-center gap-1 rounded-md border border-dashed border-border bg-bg-subtle px-4 py-8 text-center">
-          <p className="text-xs font-medium text-text-secondary">
-            No query parameters
-          </p>
-          <p className="text-[11px] text-text-muted">
-            Add a parameter or pick an endpoint that declares one.
-          </p>
-        </div>
+        <FormEmptyState
+          title="No query parameters"
+          description="Add a parameter or pick an endpoint that declares one."
+        />
       ) : (
         <div className="flex flex-col gap-1.5">
           {rows.map((row) => (
-            <div
+            <FormFieldRow
               key={row.id}
-              className={cn(
-                "grid grid-cols-[auto_1.4fr_0.6fr_0.6fr_1.6fr_2.4fr_auto] items-center gap-2 rounded-md border border-border bg-bg-base p-2",
-                !row.enabled && "opacity-60",
-              )}
-            >
-              <Switch
-                size="sm"
-                checked={row.enabled}
-                onChange={(e) => update(row.id, { enabled: e.currentTarget.checked })}
-                aria-label={`Enable ${row.name || "parameter"}`}
-              />
-              <Input
-                size="sm"
-                value={row.name}
-                onChange={(e) => update(row.id, { name: e.currentTarget.value })}
-                placeholder="query"
-              />
-              <Badge>{row.type}</Badge>
-              <Input
-                size="sm"
-                value={row.value}
-                onChange={(e) => update(row.id, { value: e.currentTarget.value })}
-                placeholder={row.name ? `?${row.name}=` : "?key="}
-              />
-              <span className="text-[10px] font-medium uppercase tracking-wider text-text-muted">
-                {row.required ? "Required" : "Optional"}
-              </span>
-              <span className="truncate text-[11px] text-text-muted">
-                {row.description ?? "—"}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={`Remove query param ${row.name}`}
-                onClick={() => remove(row.id)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+              enabled={row.enabled}
+              onEnabledChange={(v) => update(row.id, { enabled: v })}
+              name={row.name}
+              onNameChange={(n) => update(row.id, { name: n })}
+              namePlaceholder="query"
+              value={row.value}
+              onValueChange={(v) => update(row.id, { value: v })}
+              valuePlaceholder={row.name ? `?${row.name}=` : "?key="}
+              type={row.type}
+              required={row.required}
+              description={row.description}
+              removeLabel={`Remove query param ${row.name}`}
+              onRemove={() => remove(row.id)}
+            />
           ))}
         </div>
       )}
       <div>
-        <Button variant="outline" size="sm" onClick={add}>
+        <Button variant="outline" size="sm" onClick={add} className="gap-1.5">
           <Plus className="h-3.5 w-3.5" />
           Add parameter
         </Button>
       </div>
     </div>
-  );
-}
-
-function Header(): React.ReactElement {
-  return (
-    <div className="grid grid-cols-[auto_1.4fr_0.6fr_0.6fr_1.6fr_2.4fr_auto] items-center gap-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-      <span />
-      <span>Name</span>
-      <span>Type</span>
-      <span>Value</span>
-      <span>Required</span>
-      <span>Description</span>
-      <span />
-    </div>
-  );
-}
-
-function Badge({ children }: { children: React.ReactNode }): React.ReactElement {
-  return (
-    <span className="inline-flex h-6 items-center justify-center rounded border border-border bg-bg-muted px-1.5 font-mono text-[10px] uppercase tracking-wider text-text-secondary">
-      {children}
-    </span>
   );
 }

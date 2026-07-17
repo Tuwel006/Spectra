@@ -184,7 +184,7 @@ function SmartFormSlot({
         <summary className="cursor-pointer select-none font-medium uppercase tracking-wider text-text-secondary">
           View JSON
         </summary>
-        <pre className="mt-2 overflow-x-auto rounded-md border border-border bg-bg-base p-2 font-mono text-[11px] text-text-primary">
+        <pre className="mt-2 overflow-x-auto rounded-sm border border-border/60 bg-bg-base p-2 font-mono text-[11px] text-text-primary">
           {stringifyJsonSafe(value)}
         </pre>
       </details>

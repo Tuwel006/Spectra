@@ -19,7 +19,6 @@ export { DocumentationSection } from "./DocumentationSection";
 export { RequestSection } from "./RequestSection";
 export { ResponseSection } from "./ResponseSection";
 export { CollapsibleSection } from "./CollapsibleSection";
-export { PropertiesDrawer } from "./PropertiesDrawer";
 export { openResource, resolveResourceTitle } from "./openResource";
 export { SmartForm } from "./SmartForm";
 export { useEndpointUrl, resolveOperationUrl } from "./useEndpointUrl";

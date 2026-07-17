@@ -4,10 +4,8 @@ import * as React from "react";
 
 import { useWorkspaceStore } from "./store/workspaceStore";
 import { EndpointHeader } from "./EndpointHeader";
-import { PropertiesDrawer } from "./PropertiesDrawer";
 import { RequestSection } from "./RequestSection";
 import { ResponseSection } from "./ResponseSection";
-import { cn } from "@/lib/cn";
 import type { Operation } from "@spectra/core";
 
 /* ------------------------------------------------------------------ */
@@ -17,15 +15,14 @@ import type { Operation } from "@spectra/core";
 /**
  * The full endpoint workspace page.
  *
- * <p>Two-column layout:</p>
- *   • Centre column  — endpoint header + Request / Response sections
- *   • Right drawer   — Properties (Info + Properties + Timeline)
- *                       Collapsible so the user can free horizontal
- *                       room when they're editing long bodies.
+ * <p>One continuous page composed of vertically stacked sections:</p>
+ *   1. EndpointHeader  — Method · URL · Send + Server + Copy/Pin/Share
+ *   2. Request         — Params / Headers / Query / Cookies / Body
+ *   3. Response        — Documentation / Runtime
  *
- * <p>The drawer's open/closed state is persisted per tab in the workspace
- * store, so switching tabs keeps the user's preferred panel layout.
- * The scroll position of the centre column is also persisted.</p>
+ * <p>Each section's expand state, scroll position and selected sub-tab
+ * are persisted per tab in the workspace store so switching endpoints
+ * never loses edits.</p>
  */
 export function EndpointWorkspace({
   tabId,
@@ -37,13 +34,6 @@ export function EndpointWorkspace({
   const scrollerRef = React.useRef<HTMLDivElement | null>(null);
   const setScrollY = useWorkspaceStore((s) => s.setScrollY);
   const storedScrollY = useWorkspaceStore((s) => s.ui[tabId]?.scrollY ?? 0);
-
-  // Drawer open state — defaulted to open so users see the metadata
-  // out of the box. Per-tab so switching endpoints keeps the layout.
-  const drawerOpen = useWorkspaceStore(
-    (s) => s.ui[tabId]?.drawerOpen ?? true,
-  );
-  const setDrawerOpen = useWorkspaceStore((s) => s.setDrawerOpen);
 
   // Restore scroll position when the tab is mounted.
   React.useEffect(() => {
@@ -60,29 +50,20 @@ export function EndpointWorkspace({
       id={`tabpanel-${tabId}`}
       role="tabpanel"
       aria-labelledby={`tab-${tabId}`}
-      className="flex h-full w-full min-w-0 flex-row overflow-hidden bg-bg-base"
+      className="flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden bg-bg-base"
     >
-      {/* Centre column */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div
-          ref={scrollerRef}
-          onScroll={(event) =>
-            setScrollY(tabId, (event.target as HTMLDivElement).scrollTop)
-          }
-          className="flex-1 overflow-y-auto"
-        >
-          <EndpointHeader operation={operation} />
-          <RequestSection tabId={tabId} operation={operation} />
-          <ResponseSection tabId={tabId} operation={operation} />
-        </div>
-      </div>
+      <EndpointHeader operation={operation} />
 
-      {/* Right drawer */}
-      <PropertiesDrawer
-        operation={operation}
-        open={drawerOpen}
-        onToggle={() => setDrawerOpen(tabId, !drawerOpen)}
-      />
+      <div
+        ref={scrollerRef}
+        onScroll={(event) =>
+          setScrollY(tabId, (event.target as HTMLDivElement).scrollTop)
+        }
+        className="min-h-0 flex-1 overflow-y-auto"
+      >
+        <RequestSection tabId={tabId} operation={operation} />
+        <ResponseSection tabId={tabId} operation={operation} />
+      </div>
     </div>
   );
 }

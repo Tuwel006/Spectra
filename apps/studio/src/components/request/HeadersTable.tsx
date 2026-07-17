@@ -1,20 +1,22 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { cn } from "@/lib/cn";
 import { useRequestDraftStore } from "./request.store";
+import {
+  FormColumnHeader,
+  FormEmptyState,
+  FormFieldRow,
+} from "./FormFieldRow";
 
 const EMPTY: readonly never[] = [];
 
 /**
- * Editable HTTP headers table. Common headers (`Content-Type`,
- * `Accept`, `Authorization`) are pre-populated by the request store —
+ * Editable HTTP headers table. Common headers (Content-Type,
+ * Accept, Authorization) are pre-populated by the request store —
  * users can override or remove them.
  */
 export function HeadersTable({
@@ -56,60 +58,43 @@ export function HeadersTable({
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <Header />
+      <FormColumnHeader
+        columns={[
+          { label: "Enabled", width: "28px" },
+          { label: "Header", width: "minmax(140px,1.4fr)" },
+          { label: "Value", width: "minmax(0,1.6fr)" },
+          { label: "Description", width: "minmax(0,2fr)" },
+          { label: "", width: "32px" },
+        ]}
+      />
       {rows.length === 0 ? (
-        <div className="flex flex-col items-center gap-1 rounded-md border border-dashed border-border bg-bg-subtle px-4 py-8 text-center">
-          <p className="text-xs font-medium text-text-secondary">No headers</p>
-          <p className="text-[11px] text-text-muted">
-            Common headers are pre-populated from the documentation.
-          </p>
-        </div>
+        <FormEmptyState
+          title="No headers"
+          description="Common headers are pre-populated from the documentation."
+        />
       ) : (
         <div className="flex flex-col gap-1.5">
           {rows.map((row) => (
-            <div
+            <FormFieldRow
               key={row.id}
-              className={cn(
-                "grid grid-cols-[auto_1.4fr_2fr_3fr_auto] items-center gap-2 rounded-md border border-border bg-bg-base p-2",
-                !row.enabled && "opacity-60",
-              )}
-            >
-              <Switch
-                size="sm"
-                checked={row.enabled}
-                onChange={(e) => update(row.id, { enabled: e.currentTarget.checked })}
-                aria-label={`Enable header ${row.name || "header"}`}
-              />
-              <Input
-                size="sm"
-                value={row.name}
-                onChange={(e) => update(row.id, { name: e.currentTarget.value })}
-                placeholder="Header-Name"
-              />
-              <Input
-                size="sm"
-                value={row.value}
-                onChange={(e) => update(row.id, { value: e.currentTarget.value })}
-                placeholder="value"
-              />
-              <span className="truncate text-[11px] text-text-muted">
-                {row.description ?? row.name}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={`Remove header ${row.name}`}
-                onClick={() => remove(row.id)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+              enabled={row.enabled}
+              onEnabledChange={(v) => update(row.id, { enabled: v })}
+              name={row.name}
+              onNameChange={(n) => update(row.id, { name: n })}
+              namePlaceholder="Header-Name"
+              value={row.value}
+              onValueChange={(v) => update(row.id, { value: v })}
+              valuePlaceholder="value"
+              description={row.description ?? row.name}
+              removeLabel={`Remove header ${row.name}`}
+              onRemove={() => remove(row.id)}
+            />
           ))}
         </div>
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" size="sm" onClick={add}>
+        <Button variant="outline" size="sm" onClick={add} className="gap-1.5">
           <Plus className="h-3.5 w-3.5" />
           Add header
         </Button>
@@ -125,24 +110,12 @@ export function HeadersTable({
                   { id: `hdr-${Math.random().toString(36).slice(2, 8)}`, name: s, value: "", enabled: true },
                 ])
               }
-              className="rounded-full border border-border bg-bg-subtle px-2 py-0.5 text-[11px] text-text-muted hover:bg-bg-muted hover:text-text-primary"
+              className="rounded-sm border border-border bg-bg-subtle px-2 py-0.5 text-[11px] text-text-muted hover:bg-bg-muted hover:text-text-primary"
             >
               + {s}
             </button>
           ))}
       </div>
-    </div>
-  );
-}
-
-function Header(): React.ReactElement {
-  return (
-    <div className="grid grid-cols-[auto_1.4fr_2fr_3fr_auto] items-center gap-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-      <span />
-      <span>Header</span>
-      <span>Value</span>
-      <span>Description</span>
-      <span />
     </div>
   );
 }

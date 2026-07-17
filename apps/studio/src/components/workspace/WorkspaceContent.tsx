@@ -4,7 +4,9 @@ import * as React from "react";
 
 import { useResolvedWorkspaceTab } from "./hooks/useWorkspace";
 import { EndpointWorkspace } from "./EndpointWorkspace";
-import { useHasMounted } from "./store/workspaceStore";
+import { useHasMounted, useWorkspaceStore } from "./store/workspaceStore";
+import { resolveOperation } from "./store/workspaceStore";
+import type { Operation } from "@spectra/core";
 
 /**
  * Body of the workspace when at least one tab is open.
@@ -15,25 +17,43 @@ import { useHasMounted } from "./store/workspaceStore";
  *   • Other resource types (`schema`, `response`, …) get their own
  *     resolver branches in a later phase.
  *
- * Phase 2 ships the endpoint workspace; non-endpoint resources land
- * with the next phase, by design.
+ * Falls back to the first available endpoint tab if the active tab
+ * resolves to nothing, so the workspace body never appears empty
+ * while tabs are open.
  */
 export function WorkspaceContent(): React.ReactElement {
   const mounted = useHasMounted();
   const { tab, operation, isReady } = useResolvedWorkspaceTab(mounted);
 
+  // No active tab resolved — fall back to the first available
+  // endpoint tab so the body always shows content when tabs exist.
+  const fallback = useWorkspaceStore((s) => {
+    if (s.activeTabId) return null;
+    return s.tabs.find((t) => t.resourceType === "endpoint") ?? s.tabs[0] ?? null;
+  });
+
+  const effectiveTab = tab ?? fallback;
+
   // First paint before mount — render a static skeleton so SSR and the
   // first client render stay byte-identical.
-  if (!isReady || !tab || !operation) {
+  if (!mounted || !effectiveTab) {
     return <EndpointWorkspaceSkeleton />;
   }
 
-  return <EndpointWorkspace tabId={tab.id} operation={operation} />;
+  // Resolve the operation for the effective tab (may be the fallback).
+  const resolvedOp: Operation | undefined =
+    operation ?? resolveOperation(effectiveTab.resourceId);
+
+  if (!isReady || !resolvedOp) {
+    return <EndpointWorkspaceSkeleton />;
+  }
+
+  return <EndpointWorkspace tabId={effectiveTab.id} operation={resolvedOp} />;
 }
 
 /**
  * Static skeleton used during SSR and before the client hydrates.
- * Mirrors the endpoint workspace shape so the first paint matches.
+ * Mirrors {@link EndpointWorkspace} shape so the first paint matches.
  */
 function EndpointWorkspaceSkeleton(): React.ReactElement {
   return (

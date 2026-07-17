@@ -1,12 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useRequestDraftStore } from "./request.store";
+import {
+  FormColumnHeader,
+  FormEmptyState,
+  FormFieldRow,
+} from "./FormFieldRow";
 
 const EMPTY: readonly never[] = [];
 
@@ -50,61 +54,41 @@ export function CookiesTable({
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <Header />
+      <FormColumnHeader
+        columns={[
+          { label: "Name", width: "minmax(140px,1fr)" },
+          { label: "Value", width: "minmax(0,2fr)" },
+          { label: "", width: "32px" },
+        ]}
+      />
       {rows.length === 0 ? (
-        <div className="flex flex-col items-center gap-1 rounded-md border border-dashed border-border bg-bg-subtle px-4 py-8 text-center">
-          <p className="text-xs font-medium text-text-secondary">No cookies</p>
-          <p className="text-[11px] text-text-muted">
-            Add cookies that this request should send.
-          </p>
-        </div>
+        <FormEmptyState
+          title="No cookies"
+          description="Add cookies that this request should send."
+        />
       ) : (
         <div className="flex flex-col gap-1.5">
           {rows.map((row) => (
-            <div
+            <FormFieldRow
               key={row.id}
-              className="grid grid-cols-[1fr_2fr_auto] items-center gap-2 rounded-md border border-border bg-bg-base p-2"
-            >
-              <Input
-                size="sm"
-                value={row.name}
-                onChange={(e) => update(row.id, { name: e.currentTarget.value })}
-                placeholder="cookie-name"
-              />
-              <Input
-                size="sm"
-                value={row.value}
-                onChange={(e) => update(row.id, { value: e.currentTarget.value })}
-                placeholder="value"
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={`Remove cookie ${row.name}`}
-                onClick={() => remove(row.id)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+              name={row.name}
+              onNameChange={(n) => update(row.id, { name: n })}
+              namePlaceholder="cookie-name"
+              value={row.value}
+              onValueChange={(v) => update(row.id, { value: v })}
+              valuePlaceholder="value"
+              removeLabel={`Remove cookie ${row.name}`}
+              onRemove={() => remove(row.id)}
+            />
           ))}
         </div>
       )}
       <div>
-        <Button variant="outline" size="sm" onClick={add}>
+        <Button variant="outline" size="sm" onClick={add} className="gap-1.5">
           <Plus className="h-3.5 w-3.5" />
           Add cookie
         </Button>
       </div>
-    </div>
-  );
-}
-
-function Header(): React.ReactElement {
-  return (
-    <div className="grid grid-cols-[1fr_2fr_auto] items-center gap-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-      <span>Name</span>
-      <span>Value</span>
-      <span />
     </div>
   );
 }

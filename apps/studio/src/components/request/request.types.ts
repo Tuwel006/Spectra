@@ -207,6 +207,20 @@ export function collectParamHints(
     description: desc,
   });
 
+  // Pull the first referenced schema out of the request body, plus the
+  // set of media types declared under it. Falls back to undefined when
+  // the operation doesn't declare a body (e.g. GETs).
+  const bodyContentTypes: string[] = [];
+  let bodySchemaId: string | undefined;
+  let contentType: string | undefined;
+  if (op.request.body) {
+    for (const [ct, media] of Object.entries(op.request.body.content)) {
+      bodyContentTypes.push(ct);
+      if (!contentType) contentType = ct;
+      if (!bodySchemaId && media.schema?.id) bodySchemaId = media.schema.id;
+    }
+  }
+
   return {
     pathParams: op.request.pathParameters.map((p) =>
       toHint(p.id, p.name, p.description, p.schemaId, p.required),
@@ -221,8 +235,8 @@ export function collectParamHints(
       description: h.description,
       enabled: true,
     })),
-    bodySchemaId: undefined,
-    bodyContentTypes: [],
+    bodySchemaId,
+    bodyContentTypes,
     examples: extractExamples(op),
     consumes: extractAccepts(op),
     produces: extractProduces(op),
