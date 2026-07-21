@@ -1,15 +1,12 @@
-import { Documentation } from "@spectra/core";
-import { AstProject as Project } from "../project/AstProject";
+import type ts from "typescript";
+import { AstProject } from "../project";
 
 export class SourceScanner {
-  private project: Project;
+  public constructor(
+    private readonly project: AstProject,
+  ) { }
 
-  constructor(project: Project) {
-    this.project = project;
-  }
-
-  async scan(): Promise<Documentation | null> {
-    // TODO: Implement AST scanning logic
-    return null;
+  public scan(): readonly ts.SourceFile[] {
+    return this.project.getSourceFiles();
   }
 }
