@@ -438,6 +438,15 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  packages/provider-nestjs:
+    dependencies:
+      '@spectra/core':
+        specifier: workspace:*
+        version: link:../core
+      '@spectra/provider-ast':
+        specifier: workspace:*
+        version: link:../provider-ast
+
 packages:
 
   '@alloc/quick-lru@5.2.0':
