@@ -1,20 +1,14 @@
 import ts from "typescript";
-import { NodeWalker } from "../walker";
+import { NodeQuery } from "./NodeQuery";
 
-export class ClassQuery {
-    public constructor(
-        private readonly walker: NodeWalker,
-    ) { }
+export class ClassQuery extends NodeQuery<ts.ClassDeclaration> {
 
-    public execute(node: ts.Node): readonly ts.ClassDeclaration[] {
-        const classes: ts.ClassDeclaration[] = [];
+    protected match(
+        node: ts.Node,
+    ): node is ts.ClassDeclaration {
 
-        this.walker.walk(node, current => {
-            if (ts.isClassDeclaration(current)) {
-                classes.push(current);
-            }
-        });
+        return ts.isClassDeclaration(node);
 
-        return classes;
     }
+
 }

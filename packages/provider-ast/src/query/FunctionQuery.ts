@@ -1,27 +1,13 @@
 import ts from "typescript";
-import { NodeWalker } from "../walker";
+import { NodeQuery } from "./NodeQuery";
 
-export class FunctionQuery {
+export class FunctionQuery extends NodeQuery<ts.FunctionDeclaration> {
 
-    public constructor(
-        private readonly walker: NodeWalker,
-    ) { }
-
-    public execute(
+    protected match(
         node: ts.Node,
-    ): readonly ts.FunctionDeclaration[] {
+    ): node is ts.FunctionDeclaration {
 
-        const functions: ts.FunctionDeclaration[] = [];
-
-        this.walker.walk(node, current => {
-
-            if (ts.isFunctionDeclaration(current)) {
-                functions.push(current);
-            }
-
-        });
-
-        return functions;
+        return ts.isFunctionDeclaration(node);
 
     }
 
