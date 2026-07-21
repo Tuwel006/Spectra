@@ -20,6 +20,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@spectra/core": "workspace:*"
+    "@spectra/core": "workspace:*",
+    "typescript": "^5.9.3"
   }
 }
