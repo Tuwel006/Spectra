@@ -1,5 +1,5 @@
 import { Documentation } from "@spectra/core";
-import { Project } from "../project/Project";
+import { AstProject as Project } from "../project/AstProject";
 
 export class SourceScanner {
   private project: Project;
