@@ -1,1 +1,2 @@
-export * from "./ControllerAnalyzer"
+export * from "./ControllerAnalyzer";
+export * from "./RouteAnalyzer";
