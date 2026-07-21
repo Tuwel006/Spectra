@@ -7,3 +7,4 @@ export * from "./MethodQuery";
 export * from "./PropertyQuery";
 export * from "./EnumQuery";
 export * from "./InterfaceQuery";
+export * from "./VariableQuery";
