@@ -5,3 +5,5 @@ export * from "./CallExpressionQuery";
 export * from "./ImportQuery";
 export * from "./MethodQuery";
 export * from "./PropertyQuery";
+export * from "./EnumQuery";
+export * from "./InterfaceQuery";
