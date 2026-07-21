@@ -1,1 +1,7 @@
+export * from "./NodeQuery";
 export * from "./ClassQuery";
+export * from "./FunctionQuery";
+export * from "./CallExpressionQuery";
+export * from "./ImportQuery";
+export * from "./MethodQuery";
+export * from "./PropertyQuery";
