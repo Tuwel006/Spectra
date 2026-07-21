@@ -33,3 +33,24 @@ export class UsersController {
     return this.usersService.getProfile(id);
   }
 }
+
+@Controller("auth")
+export class AuthController {
+  @Post("login")
+  login() {
+
+  }
+
+  @Get("me")
+  me() {
+
+  }
+}
+
+@Controller()
+export class RootController {
+  @Get("root")
+  root() {
+    return "Root";
+  }
+}
