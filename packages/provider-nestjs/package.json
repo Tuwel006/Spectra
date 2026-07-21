@@ -17,10 +17,14 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "tsx test/controller.test.ts"
   },
   "dependencies": {
     "@spectra/core": "workspace:*",
     "@spectra/provider-ast": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
   }
 }
