@@ -429,6 +429,12 @@ importers:
 
   packages/core: {}
 
+  packages/provider-ast:
+    dependencies:
+      '@spectra/core':
+        specifier: workspace:*
+        version: link:../core
+
 packages:
 
   '@alloc/quick-lru@5.2.0':
