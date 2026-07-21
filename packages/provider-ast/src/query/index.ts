@@ -8,3 +8,4 @@ export * from "./PropertyQuery";
 export * from "./EnumQuery";
 export * from "./InterfaceQuery";
 export * from "./VariableQuery";
+export * from "./ParameterQuery";
