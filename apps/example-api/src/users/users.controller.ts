@@ -16,7 +16,7 @@ import type { LoginDto } from './dto/login.dto';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @Post('register')
+  @Post('register/test')
   @HttpCode(HttpStatus.CREATED)
   register(@Body() dto: CreateUserDto): User {
     return this.usersService.register(dto);

@@ -16,6 +16,7 @@
     "start:docs": "pnpm --filter docs start",
     "build": "turbo run build",
     "test:nest": "tsx packages/provider-nestjs/test/controller.test.ts",
+    "test:nest:decorator": "tsx packages/provider-nestjs/test/decorator.test.ts",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
