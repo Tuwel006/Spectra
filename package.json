@@ -17,7 +17,7 @@
     "build": "turbo run build",
     "test:nest": "tsx packages/provider-nestjs/test/controller.test.ts",
     "test:nest:decorator": "tsx packages/provider-nestjs/test/decorator.test.ts",
-    "test:nest:expression": "tsx packages/provider-nestjs/test/expression.test.ts",
+    "test:ast:expression": "tsx packages/provider-ast/test/expression.test.ts",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",

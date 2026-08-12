@@ -1,18 +1,41 @@
 import ts from "typescript";
-import { ExpressionInterpreter } from "../src";
+import {
+    ExpressionInspector,
+} from "../src";
 
-const interpreter = new ExpressionInterpreter();
+const inspector =
+    new ExpressionInspector();
 
 const source = ts.createSourceFile(
     "test.ts",
     `
         const a = "users";
+
         const b = 201;
+
         const c = true;
-        const d = false;
-        const e = null;
-        const f = -10;
-        const g = HttpStatus.CREATED;
+
+        const d = null;
+
+        const e = AuthGuard;
+
+        const f = HttpStatus.CREATED;
+
+        const g = createGuard();
+
+        const h = MyClass.someMethod;
+
+        const i = {
+            role: "admin"
+        };
+
+        const j = ["admin", "user"];
+
+        const k = value => value.trim();
+
+        const l = function(value) {
+            return value.trim();
+        };
     `,
     ts.ScriptTarget.Latest,
     true,
@@ -39,12 +62,12 @@ for (const statement of variableStatements) {
         continue;
     }
 
-    const value =
-        interpreter.evaluate(initializer);
+    const result =
+        inspector.inspect(initializer);
 
     console.log(
         `${name}:`,
-        value,
+        result.kind,
         "| AST:",
         initializer.getText(),
     );
