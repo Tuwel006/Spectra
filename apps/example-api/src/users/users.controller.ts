@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Param,
+  UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -11,6 +12,7 @@ import { UsersService } from './users.service';
 import type { User } from './users.service';
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { LoginDto } from './dto/login.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('users')
 export class UsersController {
@@ -29,6 +31,7 @@ export class UsersController {
   }
 
   @Get('profile/:id')
+  @UseGuards(JwtAuthGuard)
   getProfile(@Param('id') id: string): User {
     return this.usersService.getProfile(id);
   }
@@ -42,6 +45,7 @@ export class AuthController {
   }
 
   @Get("me")
+  @UseGuards(JwtAuthGuard)
   me() {
 
   }
