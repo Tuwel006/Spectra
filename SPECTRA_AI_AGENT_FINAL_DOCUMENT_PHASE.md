@@ -1520,6 +1520,234 @@ Support both single and double quotes. Preserve AST information and extract sema
 
 ---
 
+## Step D7 — Numeric literals
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/numeric-literals.test.ts` *(new)*
+- `packages/provider-ast/src/expression/ExpressionInspector.ts` *(modified — smallest generic fix)*
+- `packages/provider-ast/test/expression.test.ts` *(regression: added `const m = -10`)*
+- `package.json` — added `"test:nest:numeric"` script
+
+**Production deficiency discovered and fixed (generic, provider-ast):**
+
+The D0 audit noted that `ExpressionInspector.inspect(...)` returned
+`kind: "unknown"` for `PrefixUnaryExpression` wrapping a numeric
+literal (e.g. `-10`, `-3.14`, `-1e3`). D7 makes this explicit:
+
+- `ts.NumericLiteral` covers `201`, `0`, `3.14`, `1e3`, `9007199254740991`.
+- `ts.isPrefixUnaryExpression(expr) && expr.operator === MinusToken && ts.isNumericLiteral(expr.operand)`
+  covers `-10`, `-3.14`, `-1e3`.
+
+**Smallest generic fix** (lives entirely in `provider-ast`, no NestJS
+semantics):
+
+```diff
+ export type ExpressionKind =
+     | "string"
+     | "number"
+     | "boolean"
+     | "null"
+     | "identifier"
+     | "property-access"
+     | "call"
+     | "object"
+     | "array"
+     | "arrow-function"
+     | "function"
++    | "prefix-unary"
+     | "unknown";
+```
+
+```ts
+if (
+    ts.isPrefixUnaryExpression(expression) &&
+    expression.operator === ts.SyntaxKind.MinusToken &&
+    ts.isNumericLiteral(expression.operand)
+) {
+    return {
+        kind: "prefix-unary",
+        node: expression,
+    };
+}
+```
+
+The inspector does **not** fold the unary minus into a numeric value —
+it preserves the AST shape and reports `kind: "prefix-unary"`. Numeric
+folding (`-Number(arg.operand.text)`) is done only inside the D7 audit
+test's `view(...)` helper, where it is appropriate to display a
+semantic value for the spec-required `value: -10` form.
+
+**Regression test:** `packages/provider-ast/test/expression.test.ts`
+gains a single line `const m = -10;` whose inspection is asserted to
+print `m: prefix-unary | AST: -10`. All 12 prior kinds (a–l) keep
+their existing classifications.
+
+Test command:
+
+```bash
+pnpm test:nest:numeric
+# or directly:
+tsx packages/provider-nestjs/test/numeric-literals.test.ts
+```
+
+MATCH OUTPUT — Part A (synthetic D7 forms):
+
+```text
+===== D7 PART A — SYNTHETIC NUMERIC FORMS =====
+
+--- Numerics.m1 ---
+  argument[0]: numeric-literal, astKind: FirstLiteralToken, semanticKind: number, value: 201
+              ExpressionInspector.kind: number
+--- Numerics.m2 ---
+  argument[0]: numeric-literal, value: 0
+              ExpressionInspector.kind: number
+--- Numerics.m3 ---
+  argument[0]: numeric-literal, value: 3.14
+              ExpressionInspector.kind: number
+--- Numerics.m4 ---
+  argument[0]: prefix-unary-numeric, astKind: PrefixUnaryExpression,
+              operator: MinusToken, operandSourceText: 10,
+              operandAstKind: FirstLiteralToken, semanticKind: number, value: -10
+              ExpressionInspector.kind: prefix-unary
+--- Numerics.m5 ---
+  argument[0]: prefix-unary-numeric, value: -3.14
+              ExpressionInspector.kind: prefix-unary
+--- Numerics.m6 ---
+  argument[0]: numeric-literal, sourceText: 1e3, value: 1000
+              ExpressionInspector.kind: number
+--- Numerics.m7 ---
+  argument[0]: prefix-unary-numeric, sourceText: -1e3, value: -1000
+              ExpressionInspector.kind: prefix-unary
+--- Numerics.m8 ---
+  argument[0]: numeric-literal, value: 9007199254740991
+              ExpressionInspector.kind: number
+--- Numerics.m9 (3 args: 1, 2, 3) ---
+  argumentCount: 3; all numeric-literal, source order preserved
+--- Numerics.m10 (4 mixed args) ---
+  argumentCount: 4
+  argument[0]: string-literal,     "users"   | ExpressionInspector.kind: string
+  argument[1]: numeric-literal,   201        | ExpressionInspector.kind: number
+  argument[2]: prefix-unary-numeric, -10     | ExpressionInspector.kind: prefix-unary
+  argument[3]: boolean-literal,   true       | ExpressionInspector.kind: boolean
+```
+
+MATCH OUTPUT — Part B (real NestJS `HttpStatus.*` is **NOT** a number):
+
+```text
+===== D7 PART B — REAL NESTJS PROPERTY-ACCESS (NOT NUMBER) =====
+
+--- CartController.addItem (@HttpCode) ---
+  argument[0]: kind: property-access | sourceText: HttpStatus.OK
+              ExpressionInspector.kind: property-access
+--- OrdersController.create (@HttpCode) ---
+  argument[0]: kind: property-access | sourceText: HttpStatus.CREATED
+              ExpressionInspector.kind: property-access
+--- ProductsController.create (@HttpCode) ---
+  argument[0]: kind: property-access | sourceText: HttpStatus.CREATED
+              ExpressionInspector.kind: property-access
+--- ProductsController.remove (@HttpCode) ---
+  argument[0]: kind: property-access | sourceText: HttpStatus.NO_CONTENT
+              ExpressionInspector.kind: property-access
+```
+
+`HttpStatus.CREATED` is **never** classified as a number — it stays
+`property-access`.
+
+MATCH OUTPUT — Part C (`1 + 2` and `-value` are NOT evaluated):
+
+```text
+===== D7 PART C — NOT-A-NUMBER (no unsafe evaluation) =====
+
+--- NotNumbers.m1 ---
+  argument[0]: kind: binary | sourceText: 1 + 2 | operator: PlusToken
+              ExpressionInspector.kind: unknown
+--- NotNumbers.m2 ---
+  argument[0]: kind: prefix-unary-identifier | sourceText: -value
+              operandKind: Identifier, operandText: value
+              ExpressionInspector.kind: unknown
+--- NotNumbers.m3 ---
+  argument[0]: kind: prefix-unary-identifier | sourceText: -x.y
+              operandKind: PropertyAccessExpression, operandText: x.y
+              ExpressionInspector.kind: unknown
+```
+
+`@Decorator(1 + 2)` is `kind: binary`, never `number 3`. The inspector
+returns `unknown` (no false-positive fold). `@Decorator(-value)` and
+`@Decorator(-x.y)` stay `prefix-unary-identifier`.
+
+MATCH OUTPUT — Part D (positive vs negative classification boundary):
+
+```text
+===== D7 PART D — POSITIVE vs NEGATIVE CLASSIFICATION =====
+
+--- Boundary.positive ---
+  argument[0]: kind: numeric-literal, value: 201
+              ExpressionInspector.kind: number
+--- Boundary.negative ---
+  argument[0]: kind: prefix-unary-numeric, value: -10
+              ExpressionInspector.kind: prefix-unary
+```
+
+Two distinct classifications for what reads as "a number" in source.
+
+Verification matrix:
+
+| Required | Expected | Actual | Result |
+|---|---|---|---|
+| `@Decorator(201)` | `numeric / number / 201` | inspector `number`, value 201 | **PASS** |
+| `@Decorator(0)` | `number / 0` | inspector `number`, value 0 | **PASS** |
+| `@Decorator(3.14)` | `number / 3.14` | inspector `number`, value 3.14 | **PASS** |
+| **`@Decorator(-10)`** | `PrefixUnaryExpression / numeric -10` | inspector `prefix-unary`, AST `PrefixUnaryExpression(MinusToken, NumericLiteral 10)`, semantic `-10` | **PASS** |
+| `@Decorator(-3.14)` | prefix-unary / -3.14 | inspector `prefix-unary`, value -3.14 | **PASS** |
+| `@Decorator(1e3)` | positive exponent → 1000 | inspector `number`, value 1000 | **PASS** |
+| `@Decorator(-1e3)` | prefix-unary / -1000 | inspector `prefix-unary`, value -1000 | **PASS** |
+| `@Decorator(9007199254740991)` (large) | preserved | inspector `number`, exact 9007199254740991 | **PASS** |
+| `@Decorator(1, 2, 3)` | 3 args in order | argumentCount 3, source order preserved | **PASS** |
+| `@Decorator("users", 201, -10, true)` | mixed preserved | string + number(201) + prefix-unary(-10) + boolean | **PASS** |
+| **`@HttpCode(HttpStatus.CREATED)`** | **property-access** (NOT number) | inspector `property-access` | **PASS** |
+| `@HttpCode(HttpStatus.OK/NO_CONTENT)` | property-access | all 4 `@HttpCode` decorators report `property-access` | **PASS** |
+| **`@Decorator(1 + 2)`** | binary (NOT number 3) | `kind: binary`; inspector `unknown` | **PASS — explicitly NOT misclassified** |
+| **`@Decorator(-value)`** | prefix-unary-identifier | `operandKind: Identifier, operandText: value` | **PASS** |
+| `@Decorator(-x.y)` | prefix-unary-identifier | `operandKind: PropertyAccessExpression, operandText: x.y` | **PASS** |
+| **Boundary `201` vs `-10`** | distinct classifications | `numeric-literal` vs `prefix-unary-numeric` | **PASS** |
+| `expression.test.ts` regression | new `m: -10 → prefix-unary` | `m: prefix-unary | AST: -10` printed; a–l unchanged | **PASS** |
+
+Other verification:
+- **Typecheck:** PASS — `tsc 5.9.3` exit=0 for both `provider-ast`
+  and `provider-nestjs`.
+- **D1 regression:** scopes test exit 0; 5388-byte prior capture intact.
+- **D2 regression:** order test fresh run → 33 lines, all 12 PASS
+  assertions reproduce.
+- **D3 regression:** zero-arguments test fresh run → 47 lines.
+- **D4 regression:** one-argument test fresh run → 68 lines.
+- **D5 regression:** multiple-arguments test fresh run → 81 lines.
+- **D6 regression:** string-literals test fresh run → 131 lines.
+- **Diff:** 1 new test file + 2 small source/test edits in
+  `provider-ast` (inspector branch and regression line) + 1 line in
+  `package.json`.
+
+Architectural notes:
+- `ts.isNumericLiteral(text)` is used as-is on positive cases — no
+  manual parsing of the literal token.
+- `ts.isPrefixUnaryExpression` + `MinusToken` + `ts.isNumericLiteral`
+  on the operand is the canonical TypeScript shape for `-10`. The
+  inspector now classifies this as `kind: "prefix-unary"`.
+- No constant folding is added to the inspector. The semantic `-10`
+  value is computed only inside the D7 audit test for display.
+- `HttpStatus.CREATED` is **never** confused with a number — it stays
+  `property-access` at every layer tested.
+- Binary expressions like `1 + 2` are left as `unknown` in the
+  inspector (by design — D24 / binary expressions belongs to a later
+  step).
+
+Commits:
+- `feat(provider-ast): classify prefix-unary numeric expressions`
+- `test(provider-nestjs): audit numeric-literal decorator arguments`
+
+---
+
 ## D7 — Numeric literals
 
 Test:
