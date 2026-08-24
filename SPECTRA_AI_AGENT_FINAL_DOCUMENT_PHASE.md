@@ -2116,6 +2116,199 @@ Test `@Decorator(null)` and represent it distinctly as null.
 
 ---
 
+## Step D10 — Identifier expressions
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/identifier-expressions.test.ts` *(new)*
+- `package.json` — added `"test:nest:identifier"` script
+
+**No production-code change was needed.** `ExpressionInspector` already
+classifies `ts.isIdentifier(node)` as `kind: "identifier"`, and
+`SymbolResolver` / `DeclarationResolver` already exist in
+`packages/provider-ast/src/compiler/`.
+
+**Architecture (three-layer invariant proven by this test):**
+
+```text
+Expression (ts.Identifier "JwtAuthGuard")
+   ↓
+ExpressionInspector.inspect(...) → kind = "identifier"
+   ↓
+SymbolResolver.resolve(node)   → ts.Symbol (name=JwtAuthGuard)
+   ↓
+DeclarationResolver.resolve(node) → readonly ts.Declaration[]
+                                       (first: ImportSpecifier)
+```
+
+These are **three distinct layers**: the expression is *always*
+classified as `identifier` regardless of what the symbol points to or
+what the declarations are. Symbol and Declaration resolution are
+separate concerns, exposed independently by `SymbolResolver` and
+`DeclarationResolver`. The D10 audit-only test runs all three for
+real NestJS `@UseGuards(JwtAuthGuard)` decorators in `apps/example-api`.
+
+Test command:
+
+```bash
+pnpm test:nest:identifier
+# or directly:
+tsx packages/provider-nestjs/test/identifier-expressions.test.ts
+```
+
+MATCH OUTPUT — Part A (synthetic identifier forms and confusions):
+
+```text
+===== D10 PART A — SYNTHETIC IDENTIFIER FORMS =====
+
+--- Guards.m1 (Decorator) ---
+  argumentCount: 1
+  argument[0]: kind: identifier | sourceText: AuthGuard | astKind: Identifier | name: AuthGuard
+              ExpressionInspector.kind: identifier
+--- Guards.m2 (Decorator) ---
+  argumentCount: 3
+  argument[0]: identifier AuthGuard   | inspector: identifier
+  argument[1]: identifier AdminGuard  | inspector: identifier
+  argument[2]: identifier SomeGuard   | inspector: identifier
+--- Guards.m3 (Decorator) ---
+  argument[0]: kind: string-literal | sourceText: "AuthGuard" | value: "AuthGuard"
+              ExpressionInspector.kind: string
+--- Guards.m4 (Decorator) ---
+  argument[0]: kind: property-access | sourceText: Auth.AuthGuard | object: Auth, property: AuthGuard
+              ExpressionInspector.kind: property-access
+--- Guards.m5 (Decorator) ---
+  argument[0]: kind: call | sourceText: AuthGuard() | callee: AuthGuard | argumentCount: 0
+              ExpressionInspector.kind: call
+--- Guards.m6 (Decorator) ---
+  argument[0]: kind: array | itemCount: 2
+              items[0]: identifier AuthGuard
+              items[1]: identifier AdminGuard
+              ExpressionInspector.kind: array
+--- Guards.m7 (Decorator) ---
+  argument[0]: kind: object | guard → Identifier → identifier AuthGuard
+              ExpressionInspector.kind: object
+--- Guards.m8 (Decorator) (UnknownGuard) ---
+  argument[0]: kind: identifier | name: UnknownGuard
+              ExpressionInspector.kind: identifier   ← NOT collapsed to unknown
+--- Guards.m9 (Decorator) ---
+  argument[0]: kind: prefix-unary | operator: MinusToken | operandKind: Identifier | operandText: value
+              ExpressionInspector.kind: unknown
+--- Guards.m10 (Decorator) ---
+  argument[0]: kind: binary | operator: PlusToken
+              ExpressionInspector.kind: unknown
+--- Guards.m11 (Decorator) ---
+  argument[0]: kind: conditional | condition: Identifier | whenTrue: Identifier | whenFalse: Identifier
+              ExpressionInspector.kind: unknown
+--- Guards.m12 (Decorator) ---
+  argument[0]: kind: property-access | sourceText: HttpStatus.CREATED
+              ExpressionInspector.kind: property-access   ← NOT identifier
+--- Guards.m13 (Decorator) ---
+  argument[0]: kind: element-access | sourceText: namespace["AuthGuard"]
+              ExpressionInspector.kind: unknown           ← NOT forced to identifier
+
+--- Local class / function / constant ---
+
+--- Locals.m1 (Decorator) --- MyGuard       argument[0]: identifier (NOT classified as "class")
+--- Locals.m2 (Decorator) --- factory       argument[0]: identifier (NOT call)
+--- Locals.m3 (Decorator) --- factory()     argument[0]: call       (NOT identifier)
+--- Locals.m4 (Decorator) --- ROLE          argument[0]: identifier (NOT "admin" string)
+```
+
+MATCH OUTPUT — Part B (real NestJS three-layer resolution):
+
+```text
+===== D10 PART B — REAL NESTJS IDENTIFIERS =====
+
+--- Expression: JwtAuthGuard ---   (OrdersController @UseGuards)
+  ExpressionInspector.kind: identifier
+  SymbolResolver  : name=JwtAuthGuard | flags=2097152
+  DeclarationResolver: 1 declaration(s): [ImportSpecifier]
+  First declaration kind: ImportSpecifier
+
+--- Expression: JwtAuthGuard ---   (CartController @UseGuards)
+  ExpressionInspector.kind: identifier
+  SymbolResolver  : name=JwtAuthGuard | flags=2097152
+  DeclarationResolver: 1 declaration(s): [ImportSpecifier]
+  First declaration kind: ImportSpecifier
+
+--- Expression: JwtAuthGuard ---   (UsersController.getProfile @UseGuards)
+  ExpressionInspector.kind: identifier
+  SymbolResolver  : name=JwtAuthGuard | flags=2097152
+  DeclarationResolver: 1 declaration(s): [ImportSpecifier]
+  First declaration kind: ImportSpecifier
+```
+
+All three decorators (`OrdersController`, `CartController`,
+`UsersController.getProfile`) carry a `JwtAuthGuard` identifier that
+resolves through `SymbolResolver` and ultimately to a single
+`ImportSpecifier` declaration — proving the three-layer architecture.
+
+Verification matrix:
+
+| Required | Expected | Actual | Result |
+|---|---|---|---|
+| `@Decorator(AuthGuard)` | identifier | `identifier, name: AuthGuard` | **PASS** |
+| `@Decorator(AuthGuard, AdminGuard, SomeGuard)` | 3 identifiers in order | arg0, arg1, arg2 in source order | **PASS** |
+| `@Decorator("AuthGuard")` ≠ identifier | string | string-literal | **PASS** |
+| `@Decorator(Auth.AuthGuard)` ≠ identifier | property-access | property-access | **PASS** |
+| `@Decorator(AuthGuard())` ≠ identifier | call | call | **PASS** |
+| `@Decorator([AuthGuard, AdminGuard])` | array(2 identifiers) NOT flattened | array, items: [identifier, identifier] | **PASS** |
+| `@Decorator({ guard: AuthGuard })` | object / guard→identifier | object, guard → identifier | **PASS** |
+| `@Decorator(UnknownGuard)` | identifier (NOT collapsed) | identifier | **PASS — AST classification independent of resolution** |
+| `@Decorator(-value)` | prefix-unary NOT identifier | prefix-unary | **PASS** |
+| `@Decorator(value + other)` | binary NOT identifier | binary | **PASS** |
+| `@Decorator(value ? A : B)` | conditional NOT identifier | conditional | **PASS** |
+| `@Decorator(HttpStatus.CREATED)` | property-access NOT identifier | property-access | **PASS** |
+| `@Decorator(namespace["AuthGuard"])` | element-access NOT identifier | element-access | **PASS** |
+| `@Decorator(MyGuard)` (local class) | identifier (NOT "class") | identifier | **PASS** |
+| `@Decorator(factory)` | identifier (NOT call) | identifier | **PASS** |
+| `@Decorator(factory())` | call (NOT identifier) | call | **PASS** |
+| `@Decorator(ROLE)` (constant) | identifier (NOT "admin") | identifier | **PASS** |
+| **Real NestJS `@UseGuards(JwtAuthGuard)` three layers** | identifier / symbol / ImportSpecifier | all three layers captured for three decorators | **PASS — three-layer architecture** |
+
+Other verification:
+- **Typecheck:** PASS — `tsc 5.9.3` exit=0 for both `provider-ast`
+  and `provider-nestjs`.
+- **D1 regression:** scopes test exit 0; 5388-byte prior capture intact.
+- **D2 regression:** order test → 33 lines.
+- **D3 regression:** zero-arguments test → 47 lines.
+- **D4 regression:** one-argument test → 68 lines.
+- **D5 regression:** multiple-arguments test → 81 lines.
+- **D6 regression:** string-literals test → 131 lines.
+- **D7 regression:** numeric-literals test → 117 lines.
+- **D8 regression:** boolean-literals test → 118 lines.
+- **D9 regression:** null-literals test → 122 lines.
+- **`expression.test.ts` regression:** `m: prefix-unary | AST: -10`
+  still printed.
+- **`symbol.test.ts` regression:** exit 0.
+- **`declaration.test.ts` regression:** exit 0.
+- **Diff:** minimal — 1 new test file (`identifier-expressions.test.ts`)
+  + 1 line in `package.json`. No production code modified.
+
+Architectural note (no fix needed):
+- The three-layer architecture (Expression → Symbol → Declaration) is
+  the canonical separation enforced by `ExpressionInspector`,
+  `SymbolResolver`, and `DeclarationResolver`. Each layer is independent:
+  the `kind: "identifier"` label depends only on the AST shape; the
+  symbol depends only on TypeScript's checker; the declarations depend
+  only on the resolved symbol.
+- Unresolved identifiers (`UnknownGuard`) stay classified as
+  `identifier` because AST classification is structural and does not
+  depend on resolution success.
+- Computed property-access `namespace["AuthGuard"]` stays classified
+  as `element-access` (not yet exposed by `ExpressionInspector`,
+  currently `unknown`) — preserved structurally, NOT coerced to
+  identifier.
+- Optional chaining (`value?.foo`) and non-null assertion (`value!`)
+  are not added speculatively; they fall through to the inspector's
+  `unknown` branch, which is safe.
+
+Commit:
+- `test(provider-nestjs): audit identifier-expression decorator arguments`
+
+---
+
 ## D10 — Identifier expressions
 
 Test:
