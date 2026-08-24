@@ -1047,6 +1047,178 @@ argument[0]
 
 ---
 
+## Step D5 — Multiple arguments
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/multiple-arguments.test.ts` *(new)*
+- `package.json` — added `"test:nest:multi"` script
+
+Implementation:
+- Audit-only test verifying decorators with multiple top-level arguments
+  preserve exact argument count, exact argument order, per-argument
+  expression kind, and nested expression structure.
+- Reuses the same local `describe(ts.Expression)` shape that D4
+  introduced (one self-contained helper per test, no production code
+  changes). The helper renders arrays and objects recursively so nested
+  elements never bleed into the top-level `argumentCount`.
+
+Test command:
+
+```bash
+pnpm test:nest:multi
+# or directly:
+tsx packages/provider-nestjs/test/multiple-arguments.test.ts
+```
+
+MATCH OUTPUT — Part A (synthetic D5 cases):
+
+```text
+===== D5 PART A — SYNTHETIC MULTI-ARG CASES =====
+
+--- Multi.m1 ---
+Decorator: @Decorator()
+  argumentCount: 2
+  argument[0]: kind: string, value: "first"
+  argument[1]: kind: string, value: "second"
+--- Multi.m2 ---
+Decorator: @Decorator()
+  argumentCount: 4
+  argument[0]: kind: string, value: "users"
+  argument[1]: kind: number, value: 201
+  argument[2]: kind: boolean, value: true
+  argument[3]: kind: null
+--- Multi.m3 ---
+Decorator: @UseGuards()
+  argumentCount: 2
+  argument[0]: kind: identifier, name: AuthGuard
+  argument[1]: kind: identifier, name: AdminGuard
+--- Multi.m4 ---
+Decorator: @Decorator()
+  argumentCount: 2
+  argument[0]: kind: property-access, object: HttpStatus, property: CREATED
+  argument[1]: kind: property-access, object: HttpStatus, property: OK
+--- Multi.m5 ---
+Decorator: @Decorator()
+  argumentCount: 2
+  argument[0]: kind: call, callee: factory, argumentCount: 0
+  argument[1]: kind: call, callee: otherFactory, argumentCount: 1
+--- Multi.m6 ---
+Decorator: @Decorator()
+  argumentCount: 4
+  argument[0]: kind: identifier, name: AuthGuard
+  argument[1]: kind: array, itemCount: 2, items: [kind: string, value: "a" | kind: string, value: "b"]
+  argument[2]: kind: object, propertyKeys: [role]
+  argument[3]: kind: call, callee: factory, argumentCount: 0
+```
+
+MATCH OUTPUT — Part B (order preservation, non-alphabetical):
+
+```text
+===== D5 PART B — ORDER PRESERVATION (NON-ALPHA) =====
+
+--- OrderCase.m ---
+Decorator: @Decorator()
+  argumentCount: 4
+  argument[0]: kind: identifier, name: gamma
+  argument[1]: kind: identifier, name: alpha
+  argument[2]: kind: identifier, name: beta
+  argument[3]: kind: identifier, name: mu
+```
+
+Order is `gamma, alpha, beta, mu` — **NOT** alphabetically
+`alpha, beta, gamma, mu`. Source order is preserved verbatim.
+
+MATCH OUTPUT — Part C (real-looking NestJS multi-arg):
+
+(`apps/example-api` has no multi-arg NestJS decorators — every
+`@UseGuards(...)` call uses a single identifier. Per the D5 protocol,
+real-looking NestJS-style synthetic fixtures are used here rather than
+modifying example-api.)
+
+```text
+===== D5 PART C — REAL-LOOKING NESTJS MULTI-ARG =====
+
+--- NestMulti.guardsCase ---
+Decorator: @UseGuards()
+  argumentCount: 2
+  argument[0]: kind: identifier, name: AuthGuard
+  argument[1]: kind: identifier, name: AdminGuard
+--- NestMulti.headerCase ---
+Decorator: @Header()
+  argumentCount: 2
+  argument[0]: kind: string, value: "X-Trace"
+  argument[1]: kind: string, value: "true"
+--- NestMulti.metadataCase ---
+Decorator: @SetMetadata()
+  argumentCount: 2
+  argument[0]: kind: string, value: "role"
+  argument[1]: kind: string, value: "admin"
+```
+
+MATCH OUTPUT — Part D (the critical `@Decorator([A, B])` vs
+`@Decorator(A, B)` edge case):
+
+```text
+===== D5 PART D — ARRAY-AS-1-ARG vs 2-IDENTIFIERS =====
+
+--- Edge.arrayCase ---
+Decorator: @Decorator()
+  argumentCount: 1
+  argument[0]: kind: array, itemCount: 2, items: [kind: identifier, name: AuthGuard | kind: identifier, name: AdminGuard]
+--- Edge.flatCase ---
+Decorator: @Decorator()
+  argumentCount: 2
+  argument[0]: kind: identifier, name: AuthGuard
+  argument[1]: kind: identifier, name: AdminGuard
+--- Edge.nestedArrayCase ---
+Decorator: @Decorator()
+  argumentCount: 1
+  argument[0]: kind: array, itemCount: 2, items: [kind: identifier, name: AuthGuard | kind: array, itemCount: 1, items: [kind: identifier, name: Inner]]
+```
+
+This is the key D5 invariant: the bracket form produces
+`argumentCount: 1, kind: array, itemCount: 2`, the comma form produces
+`argumentCount: 2` with two separate identifiers. The nested array
+`[AuthGuard, [Inner]]` further proves that **only the top level is
+counted**, while the inner array's single element stays structurally
+visible inside the descriptor.
+
+Verification matrix:
+
+| Required | Expected | Actual | Result |
+|---|---|---|---|
+| `@Decorator("first", "second")` | `2 / string, string` | `2: string"first", string"second"` | **PASS** |
+| `@Decorator("users", 201, true, null)` | `4: string, number, boolean, null` | `4: string, number, boolean, null` | **PASS** |
+| `@UseGuards(AuthGuard, AdminGuard)` | `2: id, id` | `2: id AuthGuard, id AdminGuard` | **PASS** |
+| `@Decorator(HttpStatus.CREATED, HttpStatus.OK)` | `2: prop-access, prop-access` | `2: HttpStatus.CREATED, HttpStatus.OK` | **PASS** |
+| `@Decorator(factory(), otherFactory("x"))` | `2: call, call (nested 0 + 1)` | `2: call factory (0), call otherFactory (1)` | **PASS** |
+| `@Decorator(id, [a,b], {role}, factory())` | `4: id, array, object, call` | `4: id AuthGuard, array [a,b], object [role], call factory (0)` | **PASS** |
+| Non-alpha `@Decorator(gamma,alpha,beta,mu)` | `0:gamma 1:alpha 2:beta 3:mu` | `0:gamma 1:alpha 2:beta 3:mu` | **PASS — no sort** |
+| Real-looking `@UseGuards(AuthGuard, AdminGuard)` | `2: id, id` | `2: id AuthGuard, id AdminGuard` | **PASS** |
+| Real-looking `@Header("X-Trace", "true")` | `2: string, string` | `2: string "X-Trace", string "true"` | **PASS** |
+| Real-looking `@SetMetadata("role", "admin")` | `2: string, string` | `2: string "role", string "admin"` | **PASS** |
+| **`@Decorator([A,B])` vs `@Decorator(A,B)`** | `1 array / 2 identifiers` | `1 (array, itemCount 2)` vs `2 identifiers` | **PASS — explicit distinction** |
+| Nested `[AuthGuard, [Inner]]` | `1 array arg, inner array intact` | `1 (array, itemCount 2, items: [AuthGuard, array(1, [Inner])])` | **PASS — nested structure preserved** |
+
+Other verification:
+- **Typecheck:** PASS — `tsc 5.9.3` exit=0 for both `provider-ast` and
+  `provider-nestjs`.
+- **Existing tests:** unaffected — D1/D2/D3/D4 captures remain valid.
+- **Diff:** minimal — 1 new file (`multiple-arguments.test.ts`) + 1 line
+  in `package.json`.
+
+Architectural note (no fix needed): `DecoratorArguments.get` returns
+`expression.arguments` directly — TypeScript's `arguments` NodeArray
+already preserves source order and full AST structure for each entry,
+so no transformation is required to keep D5 invariants.
+
+Commit:
+- `test(provider-nestjs): audit multiple-argument decorators`
+
+---
+
 ## D5 — Multiple arguments
 
 Support:
