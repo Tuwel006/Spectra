@@ -22,6 +22,7 @@
     "test:nest:zero": "tsx packages/provider-nestjs/test/zero-arguments.test.ts",
     "test:nest:one": "tsx packages/provider-nestjs/test/one-argument.test.ts",
     "test:nest:multi": "tsx packages/provider-nestjs/test/multiple-arguments.test.ts",
+    "test:nest:string": "tsx packages/provider-nestjs/test/string-literals.test.ts",
     "test:ast:expression": "tsx packages/provider-ast/test/expression.test.ts",
     "test:nest:symbol": "tsx packages/provider-nestjs/test/symbol.test.ts",
     "test:nest:declaration": "tsx packages/provider-nestjs/test/declaration.test.ts",

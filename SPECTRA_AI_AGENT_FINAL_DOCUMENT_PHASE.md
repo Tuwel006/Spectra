@@ -1239,6 +1239,281 @@ This is not an array literal.
 
 ---
 
+## Step D6 — String literals
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/string-literals.test.ts` *(new)*
+- `package.json` — added `"test:nest:string"` script
+
+Implementation:
+- Audit-only test verifying string-literal decorator arguments correctly
+  preserve both the AST source text (with the original quotes and any
+  escape sequences intact) **and** the semantic string value (with escapes
+  resolved).
+- Reuses existing `DecoratorReader.getDecorators`, `DecoratorArguments.get`,
+  and a local `stringView(arg)` that narrows on `ts.isStringLiteral` and
+  exposes:
+  - `value` — `arg.text` (semantic, no quotes, escapes resolved)
+  - `sourceText` — `arg.getText()` (raw source text with quotes + escapes)
+  - `astKind` — `ts.SyntaxKind[arg.kind]` (always `StringLiteral`)
+  - `isNoSubstitution` — confirms it is a real `StringLiteral`, not a
+    `NoSubstitutionTemplateLiteral`.
+- The helper additionally refuses to coerce non-string arguments into
+  strings: an identifier remains an identifier and a property-access
+  remains a property-access. The D6 fixture proves this explicitly.
+
+Test command:
+
+```bash
+pnpm test:nest:string
+# or directly:
+tsx packages/provider-nestjs/test/string-literals.test.ts
+```
+
+MATCH OUTPUT — Part A (synthetic D6 cases, all 11 forms):
+
+```text
+--- StringLiterals.doubleQuoted ---
+Decorator: @Decorator(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: "users"
+    sourceText: "\"users\""
+    astKind: StringLiteral
+    isNoSubstitution: true
+--- StringLiterals.singleQuoted ---
+Decorator: @Decorator(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: "users"
+    sourceText: "'users'"
+    astKind: StringLiteral
+    isNoSubstitution: true
+--- StringLiterals.empty ---
+Decorator: @Decorator(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: ""
+    sourceText: "\"\""
+    astKind: StringLiteral
+    isNoSubstitution: true
+--- StringLiterals.spaces ---
+Decorator: @Decorator(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: "hello world"
+    sourceText: "\"hello world\""
+    astKind: StringLiteral
+    isNoSubstitution: true
+--- StringLiterals.route1 ---
+Decorator: @Decorator(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: "/users/:id"
+    sourceText: "\"/users/:id\""
+    astKind: StringLiteral
+    isNoSubstitution: true
+--- StringLiterals.hyphenated ---
+Decorator: @Decorator(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: "hello-world"
+    sourceText: "\"hello-world\""
+    astKind: StringLiteral
+    isNoSubstitution: true
+--- StringLiterals.slash ---
+Decorator: @Decorator(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: "a/b"
+    sourceText: "\"a/b\""
+    astKind: StringLiteral
+    isNoSubstitution: true
+--- StringLiterals.colon ---
+Decorator: @Decorator(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: "a:b"
+    sourceText: "\"a:b\""
+    astKind: StringLiteral
+    isNoSubstitution: true
+--- StringLiterals.escapeNewline ---
+Decorator: @Decorator(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: "hello\nworld"      (real newline char)
+    sourceText: "\"hello\\nworld\""  (2-char backslash-n)
+    astKind: StringLiteral
+    isNoSubstitution: true
+--- StringLiterals.escapeTab ---
+Decorator: @Decorator(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: "hello\tworld"
+    sourceText: "\"hello\\tworld\""
+    astKind: StringLiteral
+    isNoSubstitution: true
+--- StringLiterals.escapeQuote ---
+Decorator: @Decorator(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: "quote: \"test\""        (3 chars between quotes)
+    sourceText: "\"quote: \\\"test\\\"\""  (2-char backslash-quote)
+    astKind: StringLiteral
+    isNoSubstitution: true
+```
+
+(JSON quoting above is the test's own output verbatim — `value` is the
+raw semantic string, `sourceText` is the literal source text with
+escapes still intact.)
+
+MATCH OUTPUT — Part B (real NestJS string-literal decorators from
+`apps/example-api`):
+
+```text
+--- CartController (class scope) ---
+Decorator: @Controller(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: "cart"
+    sourceText: "'cart'"
+    astKind: StringLiteral
+    isNoSubstitution: true
+--- CartController.removeItem ---
+Decorator: @Delete(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: "items/:productId"
+    sourceText: "'items/:productId'"
+--- OrdersController (class scope) ---
+Decorator: @Controller(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: "orders"
+    sourceText: "'orders'"
+--- ProductsController (class scope) ---
+Decorator: @Controller(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: "products"
+    sourceText: "'products'"
+--- ProductsController.findOne ---
+Decorator: @Get(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: ":id"
+    sourceText: "':id'"
+--- UsersController (class scope) ---
+Decorator: @Controller(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: "users"
+    sourceText: "'users'"
+--- UsersController.register ---
+Decorator: @Post(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: "register/test"
+    sourceText: "'register/test'"
+```
+
+MATCH OUTPUT — Part C (no string coercion):
+
+```text
+--- NoCoercion.identifierCase ---
+Decorator: @Decorator(...)
+  argumentCount: 1
+  argument[0]: identifier — IDENTIFIER PRESERVED (no string coercion)
+--- NoCoercion.propertyAccessCase ---
+Decorator: @Decorator(...)
+  argumentCount: 1
+  argument[0]: property-access — PROPERTY-ACCESS PRESERVED (no string coercion)
+```
+
+`@Decorator(AuthGuard)` stays an identifier (`AuthGuard` is NOT coerced
+to a string), and `@Decorator(HttpStatus.CREATED)` stays a
+`property-access` — D6 is specifically about `StringLiteral` nodes and
+does not promote other expression kinds.
+
+MATCH OUTPUT — Part D (empty string is not zero arguments):
+
+```text
+--- EmptyStringCase.emptyStringCase ---
+Decorator: @Decorator(...)
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: ""
+    sourceText: "\"\""
+--- EmptyStringCase.zeroArgCase ---
+Decorator: @Decorator(...)
+  argumentCount: 0
+```
+
+`@Decorator("")` and `@Decorator()` are explicitly distinct — the
+former is `argumentCount: 1, value: ""`; the latter is
+`argumentCount: 0`.
+
+Verification matrix:
+
+| Required | Expected | Actual | Result |
+|---|---|---|---|
+| `@Decorator("users")` (double) | `value:"users"`, source `"users"` | value "users", sourceText `"users"` (escaped by JSON) | **PASS** |
+| `@Decorator('users')` (single) | `value:"users"`, source `'users'` | value "users", sourceText `'users'` | **PASS** — semantic identical; quote form preserved |
+| `@Decorator("")` | `argumentCount:1, value:""` | `1, value ""`, `sourceText "\"\""` | **PASS** |
+| `@Decorator("hello world")` | space preserved | `value: "hello world"` | **PASS** |
+| `@Decorator("/users/:id")` | slashes/colon preserved | `value: "/users/:id"` | **PASS** |
+| `@Decorator("hello-world")` | hyphen preserved | `value: "hello-world"` | **PASS** |
+| `@Decorator("a/b")` / `@Decorator("a:b")` | both preserved | `value: "a/b"`, `value: "a:b"` | **PASS** |
+| `@Decorator("hello\nworld")` (escape) | source 2-char `\n`, semantic real newline | `sourceText "\"hello\\nworld\""` (16 chars, escape intact), `value: "hello\nworld"` (real newline) | **PASS — distinction preserved** |
+| `@Decorator("hello\tworld")` (escape) | source 2-char `\t`, semantic real tab | `sourceText "\"hello\\tworld\""`, `value: "hello\tworld"` (real tab) | **PASS** |
+| `@Decorator("quote:\"test\"")` (escape) | source escapes backslashes; semantic has actual quotes | `sourceText "\"quote: \\\"test\\\"\""`, `value: "quote: \"test\""` | **PASS** |
+| Real `@Controller("products")` / `'cart'` / `'users'` etc | semantic strings | all return `kind: string` with correct `value` | **PASS** |
+| Real `@Get(':id')` | value `":id"` | `value: ":id"`, sourceText `':id'` | **PASS** |
+| Real `@Post('register/test')` | value `"register/test"` | `value: "register/test"` | **PASS** |
+| Real `@Delete('items/:productId')` | value with embedded slash/colon | `value: "items/:productId"` | **PASS** |
+| **`@Decorator(AuthGuard)` (no coercion)** | identifier preserved | `argument[0]: identifier — IDENTIFIER PRESERVED` | **PASS** |
+| **`@Decorator(HttpStatus.CREATED)` (no coercion)** | property-access preserved | `argument[0]: property-access — PROPERTY-ACCESS PRESERVED` | **PASS** |
+| **`@Decorator("")` ≠ `@Decorator()`** | `1, ""` vs `0` | `1` vs `0` (explicit) | **PASS** |
+
+Other verification:
+- **Typecheck:** PASS — `tsc 5.9.3` exit=0 for both `provider-ast` and
+  `provider-nestjs`.
+- **Existing tests:** unaffected — D1/D2/D3/D4/D5 captures remain valid.
+- **Diff:** minimal — 1 new file (`string-literals.test.ts`) + 1 line in
+  `package.json`.
+
+Architectural note (no fix needed): the existing `ExpressionInspector`
+already returns `kind: "string"` for `ts.isStringLiteral`. The D6
+audit-only test simply compares the two surfaces that the AST exposes
+(`arg.text` and `arg.getText()`) to guarantee neither is silently lost
+between the AST layer and any future semantic consumer.
+
+Commit:
+- `test(provider-nestjs): audit string-literal decorator arguments`
+
+---
+
 ## D6 — String literals
 
 Support both single and double quotes. Preserve AST information and extract semantic value when safe.
