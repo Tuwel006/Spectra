@@ -1770,6 +1770,164 @@ Do not incorrectly classify negative numbers.
 
 ---
 
+## Step D8 — Boolean literals
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/boolean-literals.test.ts` *(new)*
+- `package.json` — added `"test:nest:boolean"` script
+
+**No production-code change was needed.** The D0 audit already
+classified `TrueKeyword` / `FalseKeyword` as `kind: "boolean"` via the
+existing branch in `ExpressionInspector`:
+
+```ts
+if (
+    expression.kind === ts.SyntaxKind.TrueKeyword ||
+    expression.kind === ts.SyntaxKind.FalseKeyword
+) {
+    return { kind: "boolean", node: expression };
+}
+```
+
+The D8 audit-only test verifies that this classification is exercised
+correctly across the spec, and that the negative cases (`"true"` as
+string, `value` as identifier, `condition ? true : false` as
+conditional, `!true` as prefix-unary) are **not** misclassified as
+boolean literals.
+
+Test command:
+
+```bash
+pnpm test:nest:boolean
+# or directly:
+tsx packages/provider-nestjs/test/boolean-literals.test.ts
+```
+
+MATCH OUTPUT — Part A (synthetic D8 forms):
+
+```text
+===== D8 PART A — SYNTHETIC BOOLEAN FORMS =====
+
+--- Booleans.m1 ---
+  argument[0]: kind: boolean-literal | sourceText: true | astKind: TrueKeyword | semanticKind: boolean | value: true
+              ExpressionInspector.kind: boolean
+--- Booleans.m2 ---
+  argument[0]: kind: boolean-literal | sourceText: false | astKind: FalseKeyword | semanticKind: boolean | value: false
+              ExpressionInspector.kind: boolean
+--- Booleans.m3 (3 args in order) ---
+  argumentCount: 3
+  argument[0]: boolean-literal true    | ExpressionInspector.kind: boolean
+  argument[1]: boolean-literal false   | ExpressionInspector.kind: boolean
+  argument[2]: boolean-literal true    | ExpressionInspector.kind: boolean
+--- Booleans.m4 ---
+  argument[0]: kind: array | itemCount: 2
+              items[0]: boolean-literal true
+              items[1]: boolean-literal false
+              ExpressionInspector.kind: array
+--- Booleans.m5 ---
+  argument[0]: kind: object
+              enabled  → TrueKeyword  (boolean-literal true)
+              disabled → FalseKeyword (boolean-literal false)
+              ExpressionInspector.kind: object
+--- Booleans.m6bTrue / m6String / m6Identifier ---
+  m6bTrue:      boolean-literal true     | ExpressionInspector.kind: boolean
+  m6String:     string-literal "true"     | ExpressionInspector.kind: string
+  m6Identifier: identifier value          | ExpressionInspector.kind: identifier
+--- Booleans.m7Conditional ---
+  argument[0]: kind: conditional | sourceText: condition ? true : false
+              astKind: ConditionalExpression
+              conditionKind: Identifier
+              whenTrueKind:  TrueKeyword
+              whenFalseKind: FalseKeyword
+              ExpressionInspector.kind: unknown
+--- Booleans.m8NotTrue ---
+  argument[0]: kind: prefix-unary | sourceText: !true
+              astKind: PrefixUnaryExpression
+              operator: ExclamationToken
+              operandKind: TrueKeyword
+              operandSourceText: true
+              ExpressionInspector.kind: unknown
+```
+
+MATCH OUTPUT — Part B (explicit distinction trio):
+
+```text
+===== D8 PART B — DISTINCTION TRIO =====
+
+--- Distinction.booleanLiteral ---
+  argument[0]: boolean-literal | sourceText: true | astKind: TrueKeyword | value: true
+              ExpressionInspector.kind: boolean
+--- Distinction.stringLiteral ---
+  argument[0]: string-literal | sourceText: "true" | astKind: StringLiteral | value: "true"
+              ExpressionInspector.kind: string
+--- Distinction.identifier ---
+  argument[0]: identifier | sourceText: trueish | astKind: Identifier | name: trueish
+              ExpressionInspector.kind: identifier
+```
+
+MATCH OUTPUT — Part C (real-looking NestJS boolean arguments — example-api
+has no boolean decorators, so synthetic NestJS-style fixtures are used
+per the D8 protocol):
+
+```text
+===== D8 PART C — REAL-LOOKING NESTJS BOOLEAN ARGS =====
+
+--- NestBooleans.corsEnabled ---
+  argument[0]: kind: object
+              cors  → TrueKeyword  (boolean-literal true)
+              cache → FalseKeyword (boolean-literal false)
+              ExpressionInspector.kind: object
+--- NestBooleans.publicRoute ---
+  argument[0]: string-literal "public" | ExpressionInspector.kind: string
+  argument[1]: boolean-literal true     | ExpressionInspector.kind: boolean
+```
+
+Verification matrix:
+
+| Required | Expected | Actual | Result |
+|---|---|---|---|
+| `@Decorator(true)` | `boolean / true` | `boolean-literal, TrueKeyword, true`; inspector `boolean` | **PASS** |
+| `@Decorator(false)` | `boolean / false` | `boolean-literal, FalseKeyword, false`; inspector `boolean` | **PASS** |
+| `@Decorator(true, false, true)` | `3 booleans in order` | `true, false, true` in source order | **PASS** |
+| `@Decorator([true, false])` | `array(2 booleans)` not flattened | `array, itemCount: 2, items: [true, false]` | **PASS** |
+| `@Decorator({ enabled: true, disabled: false })` | object with bool values | `enabled → true, disabled → false` | **PASS** |
+| **`@Decorator(true)` ≠ `@Decorator("true")`** | `boolean ≠ string` | `boolean-literal` vs `string-literal` | **PASS** |
+| **`@Decorator(true)` ≠ `@Decorator(value)`** | `boolean ≠ identifier` | `boolean-literal` vs `identifier` | **PASS** |
+| **`@Decorator(condition ? true : false)`** | `kind = conditional` (NOT boolean) | `conditional` with condition/whenTrue/whenFalse branches; inspector `unknown` | **PASS — structural, NOT misclassified as boolean** |
+| **`@Decorator(!true)`** | `prefix-unary` (NOT silently → false) | `prefix-unary, operator: ExclamationToken, operandKind: TrueKeyword`; inspector `unknown` | **PASS — structural, NOT silently folded to false** |
+| Distinction trio (true / "true" / trueish) | three distinct classifications | `boolean-literal / string-literal / identifier` | **PASS** |
+| Real-looking `@Options({ cors: true, cache: false })` | object with booleans | `object / cors → true / cache → false` | **PASS** |
+| Real-looking `@SetMetadata("public", true)` | string + boolean | `string("public"), boolean(true)` in source order | **PASS** |
+
+Other verification:
+- **Typecheck:** PASS — `tsc 5.9.3` exit=0 for both `provider-ast` and
+  `provider-nestjs`.
+- **D1 regression:** scopes test exit 0; 5388-byte prior capture intact.
+- **D2 regression:** order test fresh run → 33 lines.
+- **D3 regression:** zero-arguments test fresh run → 47 lines.
+- **D4 regression:** one-argument test fresh run → 68 lines.
+- **D5 regression:** multiple-arguments test fresh run → 81 lines.
+- **D6 regression:** string-literals test fresh run → 131 lines.
+- **D7 regression:** numeric-literals test fresh run → 117 lines
+  (sections verified intact).
+- **Diff:** minimal — 1 new test file (`boolean-literals.test.ts`,
+  ~330 lines) + 1 line in `package.json`. No production code changed.
+
+Architectural note (no fix needed): the existing `ExpressionInspector`
+already returns `kind: "boolean"` for `TrueKeyword` / `FalseKeyword`.
+The D8 test surfaces both the existing inspector classification and a
+richer local descriptor (`sourceText`, `astKind`, `value`, etc.).
+Crucially, the negative cases (`"true"`, `value`, `condition ? true :
+false`, `!true`) are asserted to **not** collapse to `boolean`,
+preserving the structural integrity of every non-literal expression.
+
+Commit:
+- `test(provider-nestjs): audit boolean-literal decorator arguments`
+
+---
+
 ## D8 — Boolean literals
 
 Test `true` and `false` and represent them as booleans.
