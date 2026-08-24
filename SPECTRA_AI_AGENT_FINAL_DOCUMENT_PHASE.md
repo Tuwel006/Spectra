@@ -662,6 +662,149 @@ Never sort decorators alphabetically.
 
 ---
 
+## Step D3 — Zero arguments
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/zero-arguments.test.ts` *(new)*
+- `package.json` — added `"test:nest:zero"` script
+
+Implementation:
+- Audit-only test that walks every controller in `apps/example-api` and dumps
+  every zero-arg decorator it finds. Also includes two synthetic fixtures
+  (the D3 spec example verbatim, plus a `@Foo()` vs `@Foo("")` distinction).
+- Reuses existing `DecoratorReader.getName`, `DecoratorArguments.get`, and
+  `ExpressionInspector.inspect` — no production code changes.
+- For each zero-arg decorator the test prints the expected
+  `argumentCount: 0` / `arguments: []` block. For one-arg decorators used in
+  the distinction fixture it prints `argumentCount: 1` followed by the
+  `kind` (from `ExpressionInspector`) and the raw AST text `value`.
+
+Test command:
+
+```bash
+pnpm test:nest:zero
+# or directly:
+tsx packages/provider-nestjs/test/zero-arguments.test.ts
+```
+
+MATCH OUTPUT — Part A (D3 synthetic spec example):
+
+```text
+===== D3 PART A — SYNTHETIC SPEC EXAMPLE =====
+
+--- Class Test ---
+Decorator: @Controller()
+  argumentCount: 0
+  arguments: []
+Decorator: @Custom()
+  argumentCount: 0
+  arguments: []
+
+--- Method Test.method ---
+Decorator: @Get()
+  argumentCount: 0
+  arguments: []
+Decorator: @Post()
+  argumentCount: 0
+  arguments: []
+Decorator: @CustomMethod()
+  argumentCount: 0
+  arguments: []
+
+--- Parameter Test.method.value ---
+Decorator: @Body()
+  argumentCount: 0
+  arguments: []
+Decorator: @CustomParameter()
+  argumentCount: 0
+  arguments: []
+```
+
+MATCH OUTPUT — Part B (the critical `@Foo()` vs `@Foo("")` distinction):
+
+```text
+===== D3 PART B — DISTINCTION @Foo() vs @Foo('') =====
+
+
+--- Parameter Distinction.method.noArg ---
+Decorator: @Query()
+  argumentCount: 0
+  arguments: []
+
+--- Parameter Distinction.method.emptyString ---
+Decorator: @Query()
+  argumentCount: 1
+  argument[0]:
+    kind: string
+    value: "\"\""
+```
+
+This is the key D3 invariant: `@Query()` has zero arguments; `@Query("")`
+has one empty-string argument — they are **not** the same thing.
+`JSON.stringify` wraps the AST text `""` as `"\"\""` for unambiguous
+display, so the value shown is exactly one empty string literal.
+
+MATCH OUTPUT — Part C (real NestJS zero-arg decorators, abridged):
+
+```text
+===== D3 PART C — REAL NESTJS ZERO-ARG DECORATORS =====
+
+--- Class AppController | @Controller() ---
+Decorator: @Controller()
+  argumentCount: 0
+  arguments: []
+
+--- Method AppController.getHello | @Get() ---
+Decorator: @Get()
+  argumentCount: 0
+  arguments: []
+
+--- Class AppService | @Injectable() ---
+Decorator: @Injectable()
+  argumentCount: 0
+  arguments: []
+
+... (full output: 22 zero-arg decorators across all example-api controllers,
+including @Controller(), @Get(), @Post(), @Body(), and @Injectable()) ...
+```
+
+Verification matrix:
+
+| Required | Expected | Actual | Result |
+|---|---|---|---|
+| `@Controller()` (class) | `0 / []` | `argumentCount: 0, arguments: []` | **PASS** |
+| `@Custom()` (class) | `0 / []` | `argumentCount: 0, arguments: []` | **PASS** |
+| `@Get()`, `@Post()`, `@CustomMethod()` (method) | `0 / []` | three blocks all `0 / []` | **PASS** |
+| `@Body()`, `@CustomParameter()` (parameter) | `0 / []` | two blocks both `0 / []` | **PASS** |
+| `@Query()` zero-arg | `0 / []` | `argumentCount: 0, arguments: []` | **PASS** |
+| `@Query("")` one empty-string arg | `1 / kind:string / value:""` | `argumentCount: 1, kind: string, value: ""` | **PASS** |
+| Real NestJS `@Controller()`, `@Get()`, `@Post()`, `@Body()`, `@Injectable()` | `0 / []` | 22 zero-arg decorators all `0 / []` | **PASS** |
+| No phantom / undefined / null | no extra entries, no `null`, no `undefined` | every zero-arg block has exactly `[]` | **PASS** |
+
+Other verification:
+- **Typecheck:** PASS — `tsc 5.9.3` build clean for both `provider-ast`
+  and `provider-nestjs` (`exit=0`).
+- **Existing tests:** unaffected — D1 scopes output (5388 bytes) and D2
+  order output (1157 bytes) remain valid captures; no production code was
+  touched by this change.
+- **Diff:** minimal — 1 new file (`zero-arguments.test.ts`) + 1 line in
+  `package.json`.
+
+Architectural note (no fix needed): the existing `DecoratorArguments.get`
+correctly handles zero-arg by:
+- returning `[]` when the decorator expression is not a `CallExpression`
+  (i.e. `@Foo` written without parentheses — though no fixture in
+  `example-api` exercises that form),
+- returning `expression.arguments` (an empty `NodeArray`) when the
+  decorator is a `CallExpression` with no positional arguments.
+
+Commit:
+- `test(provider-nestjs): audit zero-argument decorators`
+
+---
+
 ## D3 — Zero arguments
 
 Support:
