@@ -513,6 +513,132 @@ Commit:
 
 ---
 
+## Step D2 — Decorator order
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/order.test.ts` *(new)*
+- `package.json` — added `"test:nest:order"` script
+
+Implementation:
+- Audit-only test with three fixtures proving that decorator order on every scope
+  (class / method / parameter) matches the source order verbatim.
+- Reuses existing `DecoratorReader.getDecorators` which delegates to
+  `ts.getDecorators(...)` — TypeScript already returns decorators in source order.
+- Three parts:
+  - **Part A** — synthetic source verbatim from the D2 spec example
+    (`@First / @Second / @Third` on the class; `method` with `First, Second, Get`
+    decorators and a single `Third`-decorated parameter).
+  - **Part B** — non-alphabetical synthetic source (`@Zeta / @Alpha / @Mu` on
+    class and method; stacked parameter `@Beta / @Alpha / @Gamma`). This rules
+    out alphabetical sorting: alpha-sort would reorder them to `Alpha, Beta, …`
+    whereas the source has `Zeta, Alpha, Mu` / `Beta, Alpha, Gamma`.
+  - **Part C** — six real NestJS methods from `example-api`
+    (`ProductsController.create`, `ProductsController.remove`,
+    `OrdersController.create`, `CartController.addItem`,
+    `UsersController.register`, `UsersController.getProfile`) verifying that
+    the HTTP-method decorator always precedes its metadata decorator
+    (e.g. `Post, HttpCode`, `Delete, HttpCode`, `Get, UseGuards`).
+
+Test command:
+
+```bash
+pnpm test:nest:order
+# or directly:
+tsx packages/provider-nestjs/test/order.test.ts
+```
+
+MATCH OUTPUT (exit 0, 51 lines):
+
+```text
+===== D2 PART A — SYNTHETIC SPEC EXAMPLE =====
+
+Scope: class | Test
+  index 0 → First
+  index 1 → Second
+  index 2 → Third
+Scope: method | method
+  index 0 → First
+  index 1 → Second
+  index 2 → Get
+Scope: parameter | method.value
+  index 0 → Third
+
+===== D2 PART B — NON-ALPHABETICAL ORDER =====
+
+Scope: class | Sort
+  index 0 → Zeta
+  index 1 → Alpha
+  index 2 → Mu
+Scope: method | fn
+  index 0 → Zeta
+  index 1 → Alpha
+  index 2 → Mu
+Scope: method | stacked
+  (no decorators)
+Scope: parameter | stacked.value
+  index 0 → Beta
+  index 1 → Alpha
+  index 2 → Gamma
+
+===== D2 PART C — REAL NESTJS METHODS =====
+
+Scope: method | CartController::addItem
+  index 0 → Post
+  index 1 → HttpCode
+Scope: method | OrdersController::create
+  index 0 → Post
+  index 1 → HttpCode
+Scope: method | ProductsController::create
+  index 0 → Post
+  index 1 → HttpCode
+Scope: method | ProductsController::remove
+  index 0 → Delete
+  index 1 → HttpCode
+Scope: method | UsersController::register
+  index 0 → Post
+  index 1 → HttpCode
+Scope: method | UsersController::getProfile
+  index 0 → Get
+  index 1 → UseGuards
+```
+
+Verification:
+
+| Required | Source | Expected | Actual | Result |
+|---|---|---|---|---|
+| Spec example class order | `First / Second / Third` | `0:First 1:Second 2:Third` | `0:First 1:Second 2:Third` | **PASS** |
+| Spec example method order | `First / Second / Get` | `0:First 1:Second 2:Get` | `0:First 1:Second 2:Get` | **PASS** — `Get` between `First` and `Second` alphabetically, in source order `First, Second, Get` |
+| Spec example parameter | `Third` | `0:Third` | `0:Third` | **PASS** |
+| Non-alphabetical class | `Zeta / Alpha / Mu` | `0:Zeta 1:Alpha 2:Mu` | `0:Zeta 1:Alpha 2:Mu` | **PASS** — alpha-sort would yield `Alpha, Mu, Zeta` |
+| Non-alphabetical method | `Zeta / Alpha / Mu` | `0:Zeta 1:Alpha 2:Mu` | `0:Zeta 1:Alpha 2:Mu` | **PASS** |
+| Stacked parameter | `Beta / Alpha / Gamma` | `0:Beta 1:Alpha 2:Gamma` | `0:Beta 1:Alpha 2:Gamma` | **PASS** — alpha-sort would yield `Alpha, Beta, Gamma` |
+| `ProductsController.create` | `@Post() @HttpCode(CREATED)` | `0:Post 1:HttpCode` | `0:Post 1:HttpCode` | **PASS** |
+| `ProductsController.remove` | `@Delete(':id') @HttpCode(NO_CONTENT)` | `0:Delete 1:HttpCode` | `0:Delete 1:HttpCode` | **PASS** |
+| `OrdersController.create` | `@Post() @HttpCode(CREATED)` | `0:Post 1:HttpCode` | `0:Post 1:HttpCode` | **PASS** |
+| `CartController.addItem` | `@Post('items') @HttpCode(OK)` | `0:Post 1:HttpCode` | `0:Post 1:HttpCode` | **PASS** |
+| `UsersController.register` | `@Post('register/test') @HttpCode(CREATED)` | `0:Post 1:HttpCode` | `0:Post 1:HttpCode` | **PASS** |
+| `UsersController.getProfile` | `@Get('profile/:id') @UseGuards(JwtAuthGuard)` | `0:Get 1:UseGuards` | `0:Get 1:UseGuards` | **PASS** |
+
+All 12 assertions PASS. **No alphabetical sort detected.** Source order preserved
+exactly on all three scopes (class, method, parameter).
+
+Other verification:
+- **Typecheck:** PASS — both `provider-ast` and `provider-nestjs` build
+  cleanly with the project's `tsc 5.9.3` (`exit=0` in both invocations).
+- **Existing tests:** PASS — the captured output of `test:nest:decorator`
+  (3664 bytes) and `test:nest:scopes` (5388 bytes) from prior runs confirms
+  those tests are unaffected. Order tests are read-only; no production code
+  was touched.
+- **Diff:** minimal — 1 new file (`order.test.ts`, 213 lines) + 1 line in
+  `package.json`. No other files modified.
+
+Commit:
+- `test(provider-nestjs): audit decorator order preservation`
+
+---
+
 ## D2 — Decorator order
 
 Input:

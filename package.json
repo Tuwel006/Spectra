@@ -18,6 +18,7 @@
     "test:nest": "tsx packages/provider-nestjs/test/controller.test.ts",
     "test:nest:decorator": "tsx packages/provider-nestjs/test/decorator.test.ts",
     "test:nest:scopes": "tsx packages/provider-nestjs/test/scopes.test.ts",
+    "test:nest:order": "tsx packages/provider-nestjs/test/order.test.ts",
     "test:ast:expression": "tsx packages/provider-ast/test/expression.test.ts",
     "test:nest:symbol": "tsx packages/provider-nestjs/test/symbol.test.ts",
     "test:nest:declaration": "tsx packages/provider-nestjs/test/declaration.test.ts",
