@@ -1934,6 +1934,182 @@ Test `true` and `false` and represent them as booleans.
 
 ---
 
+## Step D9 — Null literals
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/null-literals.test.ts` *(new)*
+- `package.json` — added `"test:nest:null"` script
+
+**No production-code change was needed.** `ExpressionInspector` already
+classifies `ts.SyntaxKind.NullKeyword` as `kind: "null"` via the
+existing branch (lines 64-71 of
+`packages/provider-ast/src/expression/ExpressionInspector.ts`).
+
+The D9 audit-only test verifies this classification across the spec
+matrix and explicitly asserts the negative cases (no false-positive
+collapse of conditional / binary / nullish-coalescing expressions
+whose branches or operands contain `null`).
+
+Test command:
+
+```bash
+pnpm test:nest:null
+# or directly:
+tsx packages/provider-nestjs/test/null-literals.test.ts
+```
+
+MATCH OUTPUT — Part A (synthetic D9 forms):
+
+```text
+===== D9 PART A — SYNTHETIC NULL FORMS =====
+
+--- Nulls.m1 ---
+  argumentCount: 1
+  argument[0]:
+    kind: null-literal | sourceText: null | astKind: NullKeyword | semanticKind: null | value: null
+    ExpressionInspector.kind: null
+--- Nulls.m2 ---
+  argument[0]:
+    kind: string-literal | sourceText: "null" | astKind: StringLiteral | value: "null"
+    ExpressionInspector.kind: string
+--- Nulls.m3 ---
+  argument[0]:
+    kind: identifier | sourceText: nullValue | astKind: Identifier | name: nullValue
+    ExpressionInspector.kind: identifier
+--- Nulls.m4 (null, null, "x") ---
+  argumentCount: 3
+  argument[0]: null-literal null
+  argument[1]: null-literal null
+  argument[2]: string-literal "x"
+--- Nulls.m5 ([null, "x", null]) ---
+  argumentCount: 1
+  argument[0]: kind: array, itemCount: 3
+              items[0]: null-literal null
+              items[1]: string-literal "x"
+              items[2]: null-literal null
+--- Nulls.m6 ({ value: null, name: "test" }) ---
+  argumentCount: 1
+  argument[0]: kind: object
+              value → NullKeyword   (null-literal null)
+              name  → StringLiteral (string-literal "test")
+```
+
+MATCH OUTPUT — Part B (critical `@Decorator()` vs `@Decorator(null)`):
+
+```text
+===== D9 PART B — ZERO-ARG vs NULL-ARG =====
+
+--- Critical.zeroArg ---
+  argumentCount: 0
+--- Critical.nullArg ---
+  argumentCount: 1
+  argument[0]:
+    kind: null-literal | sourceText: null | astKind: NullKeyword | value: null
+    ExpressionInspector.kind: null
+```
+
+This is the key D9 invariant: `@Decorator()` (zero-arg parentheses
+form) is `argumentCount: 0`, while `@Decorator(null)` is
+`argumentCount: 1, value: null`.
+
+MATCH OUTPUT — Part C (nested null structures and binary/nullish):
+
+```text
+===== D9 PART C — NESTED NULL STRUCTURES =====
+
+--- NestedNull.m1 ---
+  argument[0]: kind: object
+              config → object
+                value → NullKeyword  (null)
+              values → array, itemCount: 2
+                items[0]: null-literal null
+                items[1]: array, itemCount: 1
+                  items[0]: null-literal null
+--- NestedNull.m2 (value ?? null) ---
+  argument[0]: kind: binary | sourceText: value ?? null | operator: QuestionQuestionToken
+              ExpressionInspector.kind: unknown
+--- NestedNull.m3 (null ?? value) ---
+  argument[0]: kind: binary | sourceText: null ?? value | operator: QuestionQuestionToken
+              ExpressionInspector.kind: unknown
+```
+
+The nested object / array / null structure is fully preserved at every
+level. The binary `??` expressions are kept structural — NOT
+collapsed to `null` even when one operand is a `null` literal.
+
+MATCH OUTPUT — Part D (null in conditional branches):
+
+```text
+===== D9 PART D — NULL IN CONDITIONAL =====
+
+--- ConditionalNull.m1 (condition ? null : "value") ---
+  argument[0]: kind: conditional
+              condition: Identifier
+              whenTrue:  NullKeyword   (null)
+              whenFalse: StringLiteral ("value")
+              ExpressionInspector.kind: unknown
+--- ConditionalNull.m2 (condition ? "value" : null) ---
+  argument[0]: kind: conditional
+              condition: Identifier
+              whenTrue:  StringLiteral ("value")
+              whenFalse: NullKeyword   (null)
+              ExpressionInspector.kind: unknown
+```
+
+The conditional remains structural — neither branch is folded into
+the other, and the top-level kind stays `conditional`.
+
+Verification matrix:
+
+| Required | Expected | Actual | Result |
+|---|---|---|---|
+| `@Decorator(null)` | `1 / null / null` | `null-literal, NullKeyword, value: null`; inspector `null` | **PASS** |
+| **`@Decorator()` vs `@Decorator(null)`** | `0` vs `1, null` | `0` vs `1, null-literal` | **PASS — critical** |
+| `@Decorator("null")` | string | `string-literal, value: "null"`; inspector `string` | **PASS** |
+| `@Decorator(nullValue)` | identifier | `identifier, name: nullValue`; inspector `identifier` | **PASS** |
+| `@Decorator(null, null, "x")` | `3 args in source order` | `null, null, string` | **PASS** |
+| `@Decorator([null, "x", null])` | `array(3) NOT flattened` | `array, itemCount: 3, items: [null, string, null]` | **PASS** |
+| `@Decorator({value:null,name:"test"})` | `object / value→null / name→string` | object, value→null, name→string | **PASS** |
+| Nested `{config:{value:null},values:[null,[null]]}` | structure preserved at every level | object→object→null + array→[null,[null]] | **PASS** |
+| `@Decorator(value ?? null)` | binary, NOT collapsed | `binary, operator: QuestionQuestionToken`; inspector `unknown` | **PASS** |
+| `@Decorator(null ?? value)` | binary, NOT collapsed | `binary, operator: QuestionQuestionToken`; inspector `unknown` | **PASS** |
+| `@Decorator(condition ? null : "value")` | conditional (NOT collapsed) | `conditional, whenTrue: null, whenFalse: string`; inspector `unknown` | **PASS** |
+| `@Decorator(condition ? "value" : null)` | conditional (NOT collapsed) | `conditional, whenTrue: string, whenFalse: null`; inspector `unknown` | **PASS** |
+
+Other verification:
+- **Typecheck:** PASS — `tsc 5.9.3` exit=0 for both `provider-ast`
+  and `provider-nestjs`.
+- **D1 regression:** scopes test exit 0; 5388-byte prior capture intact.
+- **D2 regression:** order test fresh run → 33 lines.
+- **D3 regression:** zero-arguments test fresh run → 47 lines.
+- **D4 regression:** one-argument test fresh run → 68 lines.
+- **D5 regression:** multiple-arguments test fresh run → 81 lines.
+- **D6 regression:** string-literals test fresh run → 131 lines.
+- **D7 regression:** numeric-literals test fresh run → 117 lines.
+- **D8 regression:** boolean-literals test fresh run → 118 lines.
+- **expression.test.ts regression:** `m: prefix-unary | AST: -10`
+  still printed.
+- **Diff:** minimal — 1 new test file (`null-literals.test.ts`) + 1
+  line in `package.json`. No production code modified.
+
+Architectural note (no fix needed): `ExpressionInspector`'s
+`ts.SyntaxKind.NullKeyword` branch returns `kind: "null"` and the
+underlying AST node. The D9 audit test adds a richer local descriptor
+that also surfaces `sourceText`, `astKind`, and the structural
+information of nested containers (arrays, objects, conditionals,
+binaries). The negative cases (binary `??`, conditional `?:`, nested
+null inside object / array) are explicitly asserted to remain
+structural — the inspector returns `"unknown"` for the binary /
+conditional wrappers, which is correct because the constant-fold that
+would be required to collapse them is forbidden by the protocol.
+
+Commit:
+- `test(provider-nestjs): audit null-literal decorator arguments`
+
+---
+
 ## D9 — Null
 
 Test `@Decorator(null)` and represent it distinctly as null.
