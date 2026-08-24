@@ -823,6 +823,211 @@ arguments = []
 
 ---
 
+## Step D4 — One argument
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/one-argument.test.ts` *(new)*
+- `package.json` — added `"test:nest:one"` script
+
+Implementation:
+- Audit-only test verifying that decorators with exactly one argument
+  preserve the AST expression correctly.
+- Each argument is described via a small local `describe(ts.Expression)`
+  helper that uses TypeScript's narrowing predicates (`ts.isStringLiteral`,
+  `ts.isNumericLiteral`, `ts.isIdentifier`, `ts.isPropertyAccessExpression`,
+  `ts.isCallExpression`, `ts.isArrayLiteralExpression`,
+  `ts.isObjectLiteralExpression`, etc.) — no production code changes; the
+  helper lives only inside the test file.
+- Output for each one-arg decorator shows `argumentCount: 1` plus the
+  fully expanded argument descriptor (`kind`, `value`, `name`, `object`,
+  `property`, `callee`, `itemCount`, `propertyKeys`, etc.) so a reader can
+  tell primitives from identifiers from compound expressions at a glance.
+
+Test command:
+
+```bash
+pnpm test:nest:one
+# or directly:
+tsx packages/provider-nestjs/test/one-argument.test.ts
+```
+
+MATCH OUTPUT — Part A (synthetic, all 10 expression forms, one method each):
+
+```text
+===== D4 PART A — SYNTHETIC ONE-ARG EXPRESSION FORMS =====
+
+--- OneArg.m1 ---
+Decorator: @Get()
+  argumentCount: 1
+  argument[0]: kind: string, value: "users"
+--- OneArg.m2 ---
+Decorator: @Get()
+  argumentCount: 1
+  argument[0]: kind: string, value: ""
+--- OneArg.m3 ---
+Decorator: @HttpCode()
+  argumentCount: 1
+  argument[0]: kind: number, value: 201
+--- OneArg.m4 ---
+Decorator: @Decorator()
+  argumentCount: 1
+  argument[0]: kind: boolean, value: true
+--- OneArg.m5 ---
+Decorator: @Decorator()
+  argumentCount: 1
+  argument[0]: kind: null
+--- OneArg.m6 ---
+Decorator: @UseGuards()
+  argumentCount: 1
+  argument[0]: kind: identifier, name: AuthGuard
+--- OneArg.m7 ---
+Decorator: @HttpCode()
+  argumentCount: 1
+  argument[0]: kind: property-access, object: HttpStatus, property: CREATED
+--- OneArg.m8 ---
+Decorator: @Decorator()
+  argumentCount: 1
+  argument[0]: kind: call, callee: factory, argumentCount: 0
+--- OneArg.m9 ---
+Decorator: @Decorator()
+  argumentCount: 1
+  argument[0]: kind: array, itemCount: 2, items: [kind: identifier, name: AuthGuard | kind: identifier, name: AdminGuard]
+--- OneArg.m10 ---
+Decorator: @Decorator()
+  argumentCount: 1
+  argument[0]: kind: object, propertyKeys: [role, enabled]
+```
+
+MATCH OUTPUT — Part B (real NestJS one-arg decorators from `example-api`):
+
+```text
+===== D4 PART B — REAL NESTJS ONE-ARG DECORATORS =====
+
+--- CartController.addItem (method scope) ---
+Decorator: @HttpCode()
+  argumentCount: 1
+  argument[0]: kind: property-access, object: HttpStatus, property: OK
+--- CartController (class scope) ---
+Decorator: @UseGuards()
+  argumentCount: 1
+  argument[0]: kind: identifier, name: JwtAuthGuard
+--- OrdersController.findOne (method scope) ---
+Decorator: @Get()
+  argumentCount: 1
+  argument[0]: kind: string, value: ":id"
+--- OrdersController.create (method scope) ---
+Decorator: @HttpCode()
+  argumentCount: 1
+  argument[0]: kind: property-access, object: HttpStatus, property: CREATED
+--- OrdersController (class scope) ---
+Decorator: @UseGuards()
+  argumentCount: 1
+  argument[0]: kind: identifier, name: JwtAuthGuard
+--- ProductsController (class scope) ---
+Decorator: @Controller()
+  argumentCount: 1
+  argument[0]: kind: string, value: "products"
+--- ProductsController.findOne (method scope) ---
+Decorator: @Get()
+  argumentCount: 1
+  argument[0]: kind: string, value: ":id"
+--- ProductsController.create (method scope) ---
+Decorator: @HttpCode()
+  argumentCount: 1
+  argument[0]: kind: property-access, object: HttpStatus, property: CREATED
+--- ProductsController.remove (method scope) ---
+Decorator: @HttpCode()
+  argumentCount: 1
+  argument[0]: kind: property-access, object: HttpStatus, property: NO_CONTENT
+```
+
+MATCH OUTPUT — Part C (the crucial identifier-vs-array-as-one-arg distinction):
+
+```text
+===== D4 PART C — IDENTIFIER vs ARRAY-AS-ONE-ARG =====
+
+--- GuardsExample.identifierCase ---
+Decorator: @UseGuards()
+  argumentCount: 1
+  argument[0]: kind: identifier, name: AuthGuard
+--- GuardsExample.arrayCase ---
+Decorator: @UseGuards()
+  argumentCount: 1
+  argument[0]: kind: array, itemCount: 2, items: [kind: identifier, name: AuthGuard | kind: identifier, name: AdminGuard]
+```
+
+Both decorators report `argumentCount: 1`, but the second is
+`kind: array, itemCount: 2`. **Decorator argument count is NOT confused
+with nested expression element count.**
+
+MATCH OUTPUT — Part D (call-as-one-arg):
+
+```text
+===== D4 PART D — CALL-AS-ONE-ARG =====
+
+--- CallExample.callCase ---
+Decorator: @Decorator()
+  argumentCount: 1
+  argument[0]: kind: call, callee: factory, argumentCount: 0
+--- CallExample.arrayWithCallCase ---
+Decorator: @Decorator()
+  argumentCount: 1
+  argument[0]: kind: array, itemCount: 2, items: [kind: identifier, name: AuthGuard | kind: identifier, name: AdminGuard]
+```
+
+A `CallExpression` containing its own arguments is still **one** decorator
+argument; the call's own argument count is preserved structurally inside
+the descriptor (`argumentCount: 0` for `factory()`).
+
+Verification matrix:
+
+| Required (synthetic) | Expected | Actual | Result |
+|---|---|---|---|
+| `@Get("users")` | `1 / string / "users"` | `argumentCount: 1, kind: string, value: "users"` | **PASS** |
+| `@Get("")` | `1 / string / ""` | `argumentCount: 1, kind: string, value: ""` | **PASS** |
+| `@HttpCode(201)` | `1 / number / 201` | `argumentCount: 1, kind: number, value: 201` | **PASS** |
+| `@Decorator(true)` | `1 / boolean / true` | `argumentCount: 1, kind: boolean, value: true` | **PASS** |
+| `@Decorator(null)` | `1 / null` | `argumentCount: 1, kind: null` | **PASS** |
+| `@UseGuards(AuthGuard)` | `1 / identifier / AuthGuard` | `argumentCount: 1, kind: identifier, name: AuthGuard` | **PASS** |
+| `@HttpCode(HttpStatus.CREATED)` | `1 / property-access / HttpStatus.CREATED` | `object: HttpStatus, property: CREATED` | **PASS** |
+| `@Decorator(factory())` | `1 / call / factory` | `kind: call, callee: factory, argumentCount: 0` | **PASS** |
+| `@Decorator([AuthGuard, AdminGuard])` | `1 / array / [AuthGuard, AdminGuard]` | `kind: array, itemCount: 2, items: [AuthGuard, AdminGuard]` | **PASS** |
+| `@Decorator({ role, enabled })` | `1 / object / [role, enabled]` | `kind: object, propertyKeys: [role, enabled]` | **PASS** |
+
+| Required (real NestJS) | Expected | Actual | Result |
+|---|---|---|---|
+| `@Controller("products")` | `string / "products"` | `kind: string, value: "products"` | **PASS** |
+| `@Get(":id")` | `string / ":id"` | `kind: string, value: ":id"` | **PASS** |
+| `@HttpCode(HttpStatus.CREATED)` | `property-access / CREATED` | `object: HttpStatus, property: CREATED` | **PASS** |
+| `@HttpCode(HttpStatus.NO_CONTENT)` | `property-access / NO_CONTENT` | `object: HttpStatus, property: NO_CONTENT` | **PASS** |
+| `@HttpCode(HttpStatus.OK)` | `property-access / OK` | `object: HttpStatus, property: OK` | **PASS** |
+| `@UseGuards(JwtAuthGuard)` | `identifier / JwtAuthGuard` | `kind: identifier, name: JwtAuthGuard` | **PASS** |
+
+| Distinction | Expected | Actual | Result |
+|---|---|---|---|
+| `argumentCount` vs nested element count | array of 2 items ≠ `argumentCount: 2` | `@UseGuards([AuthGuard, AdminGuard])` → `argumentCount: 1, kind: array, itemCount: 2` | **PASS** |
+| Call expression containing its own args | one decorator arg regardless | `@Decorator(factory())` → `argumentCount: 1` with call's own `argumentCount: 0` preserved structurally | **PASS** |
+
+Other verification:
+- **Typecheck:** PASS — `tsc 5.9.3` exit=0 for both `provider-ast` and
+  `provider-nestjs`.
+- **Existing tests:** unaffected — D1/D2/D3 captures remain valid.
+- **Diff:** minimal — 1 new file (`one-argument.test.ts`, 379 lines) + 1
+  line in `package.json`.
+
+Architectural note (no fix needed): `ExpressionInspector`'s existing
+`ExpressionKind` union covers all 10 D4 cases. The richer descriptor
+(`describe` helper inside the test) only uses `ts.*` narrowing predicates
+that the public type-checker API exposes — no internal access, no
+production-code changes.
+
+Commit:
+- `test(provider-nestjs): audit one-argument decorators`
+
+---
+
 ## D4 — One argument
 
 Support:
