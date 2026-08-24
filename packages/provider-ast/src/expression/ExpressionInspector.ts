@@ -12,6 +12,7 @@ export type ExpressionKind =
     | "array"
     | "arrow-function"
     | "function"
+    | "prefix-unary"
     | "unknown";
 
 export interface ExpressionInfo {
@@ -35,6 +36,17 @@ export class ExpressionInspector {
         if (ts.isNumericLiteral(expression)) {
             return {
                 kind: "number",
+                node: expression,
+            };
+        }
+
+        if (
+            ts.isPrefixUnaryExpression(expression) &&
+            expression.operator === ts.SyntaxKind.MinusToken &&
+            ts.isNumericLiteral(expression.operand)
+        ) {
+            return {
+                kind: "prefix-unary",
                 node: expression,
             };
         }

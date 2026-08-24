@@ -36,6 +36,8 @@ const source = ts.createSourceFile(
         const l = function(value) {
             return value.trim();
         };
+
+        const m = -10;
     `,
     ts.ScriptTarget.Latest,
     true,
