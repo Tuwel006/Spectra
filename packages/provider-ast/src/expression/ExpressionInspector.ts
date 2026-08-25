@@ -7,6 +7,7 @@ export type ExpressionKind =
     | "null"
     | "identifier"
     | "property-access"
+    | "element-access"
     | "call"
     | "object"
     | "array"
@@ -80,6 +81,13 @@ export class ExpressionInspector {
         if (ts.isPropertyAccessExpression(expression)) {
             return {
                 kind: "property-access",
+                node: expression,
+            };
+        }
+
+        if (ts.isElementAccessExpression(expression)) {
+            return {
+                kind: "element-access",
                 node: expression,
             };
         }

@@ -38,6 +38,8 @@ const source = ts.createSourceFile(
         };
 
         const m = -10;
+
+        const n = values["key"];
     `,
     ts.ScriptTarget.Latest,
     true,
