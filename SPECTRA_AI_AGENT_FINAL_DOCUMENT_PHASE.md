@@ -3455,6 +3455,42 @@ Do not falsely turn a dynamic template into a constant string.
 
 ---
 
+## Step D22 — New expressions
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/new-expressions.test.ts` *(new)*
+- `package.json` — added `"test:nest:new"` script
+
+**Initial production state:** `ExpressionInspector` returned
+`kind: "unknown"` for `ts.NewExpression`. Fixed in the D16-D29
+production commit `5d4f147`.
+
+**Test command:**
+```bash
+pnpm test:nest:new
+```
+
+**MATCH OUTPUT — 6/6 top-level new expressions PASS:**
+- `new Foo()` → new (callee: Foo, args: [])
+- `new Foo("x")` → new (args: 1)
+- `new Foo(A, B)` → new (args: 2)
+- `new ns.Foo()` → new (callee: ns.Foo, args: 0)
+- `new Pipe({ whitelist: true })` → new (args: 1 with object)
+- `[new AuthGuard(), new AdminGuard()]` → array of two new expressions
+- `new Inner(new Deep())` → new with nested new as arg
+
+**Boundary:** `new Foo()[0]` is `element-access` (top-level AST node),
+`new Foo().value` is `property-access` (top-level AST node). Constructors
+are NEVER executed.
+
+**Regression:** D2-D17 all green.
+
+**Commit:** `test(provider-nestjs): audit new-expression decorator arguments`
+
+---
+
 ## D22 — Parenthesized expressions
 
 Test:
