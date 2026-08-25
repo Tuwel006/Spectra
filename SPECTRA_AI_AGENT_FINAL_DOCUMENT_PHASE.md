@@ -3005,6 +3005,222 @@ Represent constructor and arguments structurally.
 
 ---
 
+## Step D14 — Array expressions
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/array-expressions.test.ts` *(new)*
+- `package.json` — added `"test:nest:array"` script
+
+**Initial production state:** inspected
+`packages/provider-ast/src/expression/ExpressionInspector.ts` —
+the existing branch for `ts.isArrayLiteralExpression` (lines 109-114)
+already returns `kind: "array"` with the AST node.
+
+**Production deficiency:** none found. The existing `ExpressionInspector`
+correctly classifies array literals. **No production change is needed.**
+
+Test command:
+
+```bash
+pnpm test:nest:array
+# or directly:
+tsx packages/provider-nestjs/test/array-expressions.test.ts
+```
+
+MATCH OUTPUT — Part A (synthetic array forms):
+
+```text
+===== D14 PART A — SYNTHETIC ARRAY FORMS =====
+
+--- ArrayForms.m1Empty ([]) ---
+  argumentCount: 1
+  argument[0]: kind: array | itemCount: 0 | items: []
+              ExpressionInspector.kind: array
+--- ArrayForms.m2Single ([A]) ---
+  kind: array | itemCount: 1 | items[0]: identifier A
+              ExpressionInspector.kind: array
+--- ArrayForms.m3Multi ([A, B, C]) ---
+  kind: array | itemCount: 3 | items: [A, B, C] in source order
+--- ArrayForms.m4Identifiers ([AuthGuard, AdminGuard]) ---
+  kind: array | itemCount: 2 | items: [identifier AuthGuard, identifier AdminGuard]
+--- ArrayForms.m5MixedPrimitives (["a", 1, true, null]) ---
+  kind: array | itemCount: 4
+              items[0]: string "a", items[1]: number 1,
+              items[2]: boolean true, items[3]: null
+--- ArrayForms.m6PropertyAccess ([HttpStatus.CREATED, HttpStatus.OK]) ---
+  kind: array | items: [property-access HttpStatus.CREATED, property-access HttpStatus.OK]
+--- ArrayForms.m7Calls ([factory(), otherFactory("x")]) ---
+  kind: array | items: [call factory(), call otherFactory("x")]
+--- ArrayForms.m8Nested ([[A], [[B]]]) ---
+  kind: array | itemCount: 2
+              items[0]: array [A]
+              items[1]: array [[B]]
+                items[0]: array [B]
+                  items[0]: identifier B   ← 3-deep nesting preserved
+--- ArrayForms.m9MixedStructures ---
+  array(3):
+    items[0]: identifier AuthGuard
+    items[1]: object { guard: AdminGuard, options: [true, false] }
+                  guard → identifier AdminGuard
+                  options → array [boolean true, boolean false]
+    items[2]: call factory("x")
+--- ArrayForms.m10PropertyAndElement ---
+  array(2):
+    items[0]: property-access HttpStatus.CREATED
+    items[1]: element-access values["key"]
+--- ArrayForms.m11BinaryConditionalPrefixUnary ([1+2, cond?"a":"b", -5]) ---
+  array(3):
+    items[0]: binary 1 + 2 (NOT 3)
+    items[1]: conditional cond ? "a" : "b" (NOT evaluated)
+    items[2]: prefix-unary -5
+```
+
+MATCH OUTPUT — Part B (critical invariant — array-as-1-arg vs 2 identifiers):
+
+```text
+===== D14 PART B — ARRAY-AS-1-ARG vs 2 IDENTIFIERS =====
+
+--- ArrayBoundary.arrayForm ([A, B]) ---
+  argumentCount: 1
+  argument[0]: kind: array | itemCount: 2 | items: [A, B]
+              ExpressionInspector.kind: array
+
+--- ArrayBoundary.twoIdentifiers (A, B) ---
+  argumentCount: 2
+  argument[0]: kind: identifier | name: A
+              ExpressionInspector.kind: identifier
+  argument[1]: kind: identifier | name: B
+              ExpressionInspector.kind: identifier
+
+--- ArrayBoundary.oneArgArray ([A]) ---
+  argumentCount: 1 | array, itemCount: 1, items[0]: A
+
+--- ArrayBoundary.oneArgIdentifier (A) ---
+  argumentCount: 1 | identifier A
+```
+
+The critical D14 invariant: `@Decorator([A, B])` produces
+`argumentCount: 1` with `itemCount: 2`; it NEVER becomes
+`argumentCount: 2`. The bracket form is structurally distinct from
+the comma form.
+
+MATCH OUTPUT — Part C (real-looking NestJS array decorators):
+
+```text
+===== D14 PART C — REAL-LOOKING NESTJS ARRAY DECORATORS =====
+
+@UseGuards([JwtAuthGuard, AdminGuard])              → array(2 identifiers)
+@UseInterceptors([LoggingInterceptor, MetricsInterceptor]) → array(2 identifiers)
+@UsePipes([ValidationPipe({ whitelist: true }), ParseIntPipe])
+                                                       → array(call, identifier)
+@Roles(["admin", "user"])                           → array(2 string-literals)
+@SetMetadata("guards", [AuthGuard, RolesGuard])     → string + array(2 identifiers)
+```
+
+MATCH OUTPUT — Part D (deeply nested array integrity):
+
+```text
+===== D14 PART D — DEEPLY NESTED ARRAY INTEGRITY =====
+
+--- DeepArray.threeDeep ([[[A]]]) ---
+  argumentCount: 1
+  argument[0]: kind: array
+              items[0]: array
+                items[0]: array
+                  items[0]: identifier A
+--- DeepArray.irregularNested ([A, [B, [C, [D]]]]) ---
+  argumentCount: 1
+  argument[0]: kind: array
+              items[0]: identifier A
+              items[1]: array
+                items[0]: identifier B
+                items[1]: array
+                  items[0]: identifier C
+                  items[1]: array
+                    items[0]: identifier D
+```
+
+Verification matrix:
+
+| Required | Expected | Actual | Result |
+|---|---|---|---|
+| `@Decorator([])` | `array, itemCount: 0` | matches | **PASS** |
+| `@Decorator([A])` | `array, itemCount: 1` | matches | **PASS** |
+| `@Decorator([A, B, C])` | `array(3)` in order | matches | **PASS** |
+| `@Decorator([AuthGuard, AdminGuard])` | `array(2 identifiers)` | matches | **PASS** |
+| `@Decorator(["a", 1, true, null])` | mixed primitive kinds | matches | **PASS** |
+| `@Decorator([HttpStatus.CREATED, HttpStatus.OK])` | array of property-accesses | matches | **PASS** |
+| `@Decorator([factory(), otherFactory("x")])` | array of calls | matches | **PASS** |
+| `@Decorator([[A], [[B]]])` | 3-deep nesting | matches | **PASS** |
+| Mixed `[id, {guard, options:[...]}, factory()]` | structural | matches | **PASS** |
+| `[HttpStatus.CREATED, values["key"]]` | property + element | matches | **PASS** |
+| `[1+2, cond?"a":"b", -5]` | binary/conditional/prefix-unary preserved, NOT evaluated | matches | **PASS — NOT evaluated** |
+| **`@Decorator([A, B])`** | `argumentCount: 1, itemCount: 2` | matches | **PASS — critical invariant** |
+| **`@Decorator(A, B)`** | `argumentCount: 2` | matches | **PASS — critical invariant** |
+| `@UseGuards([JwtAuthGuard, AdminGuard])` | `array(2 identifiers)` | matches | **PASS** |
+| `@UseInterceptors([Logging, Metrics])` | `array(2 identifiers)` | matches | **PASS** |
+| `@UsePipes([ValidationPipe({...}), ParseIntPipe])` | `array(call, identifier)` | matches | **PASS** |
+| `@Roles(["admin", "user"])` | `array(2 string-literals)` | matches | **PASS** |
+| `@SetMetadata("guards", [AuthGuard, RolesGuard])` | `string + array` | matches | **PASS** |
+| `[[[A]]]` (3-deep) | full nesting preserved | matches | **PASS** |
+| `[A, [B, [C, [D]]]]` (irregular 4-deep) | full nesting preserved | matches | **PASS** |
+
+Other verification:
+- **Typecheck:** PASS — `tsc 5.9.3` exit=0 for both `provider-ast`
+  and `provider-nestjs`.
+- **D2 regression:** order test → 33 lines.
+- **D3 regression:** zero-arguments test → 47 lines.
+- **D4 regression:** one-argument test → 68 lines.
+- **D5 regression:** multiple-arguments test → 81 lines.
+- **D6 regression:** string-literals test → 131 lines.
+- **D7 regression:** numeric-literals test → 117 lines.
+- **D8 regression:** boolean-literals test → 118 lines.
+- **D9 regression:** null-literals test → 122 lines.
+- **D10 regression:** identifier-expressions test → 85 lines.
+- **D11 regression:** property-access test → 100 lines.
+- **D12 regression:** element-access test → 102 lines.
+- **D13 regression:** call-expressions test → 257 lines.
+- **`expression.test.ts` regression:** a–n unchanged.
+- **`symbol.test.ts` regression:** exit 0.
+- **`declaration.test.ts` regression:** exit 0.
+- **Diff:** minimal — 1 new test file (`array-expressions.test.ts`)
+  + 1 line in `package.json`. No production code modified.
+
+Architectural notes:
+- `ExpressionInspector`'s `ts.isArrayLiteralExpression` branch returns
+  `kind: "array"`. The D14 test view additionally surfaces `astKind`,
+  `itemCount`, and a recursively-described list of items via
+  `items: ExpressionView[]`. The recursive `view(...)` helper
+  preserves structural classification for every nested expression
+  kind (including arrays inside arrays).
+- The D14 invariant — top-level decorator `argumentCount` is never
+  inflated by nested array elements — is asserted via Part B's
+  side-by-side comparison and via the `@Decorator([A, B])` vs
+  `@Decorator(A, B)` case (1 with itemCount 2 vs 2 separate
+  identifier args).
+- `ExpressionInspector` returns `kind: "unknown"` for `BinaryExpression`,
+  `ConditionalExpression`, and any `PrefixUnaryExpression` whose
+  operator is not `MinusToken`. The D14 test view classifies these
+  structurally inside array items (so they are visible in the
+  MATCH OUTPUT), but the production gap is preserved.
+
+Known remaining gaps (carried forward):
+1. `ConditionalExpression` still `unknown` in production inspector
+   (deferred to D23).
+2. `BinaryExpression` still `unknown` in production inspector
+   (deferred to D24).
+3. `PrefixUnaryExpression` with non-`MinusToken` operator still
+   `unknown` (D7 only added `MinusToken + NumericLiteral` branch).
+4. Optional chaining `?.[index]` and similar are not added
+   speculatively; they fall through to `unknown`.
+
+Commit:
+- `test(provider-nestjs): audit array-expression decorator arguments`
+
+---
+
 ## D14 — Array literals
 
 Test:
