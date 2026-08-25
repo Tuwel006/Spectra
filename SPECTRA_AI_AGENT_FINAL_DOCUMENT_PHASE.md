@@ -2323,6 +2323,191 @@ Represent the expression as an identifier first. Do not assume it is a class/fun
 
 ---
 
+## Step D11 — Property-access expressions
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/property-access.test.ts` *(new)*
+- `package.json` — added `"test:nest:property"` script
+
+**No production-code change was needed.** `ExpressionInspector`
+already classifies `ts.isPropertyAccessExpression` as
+`kind: "property-access"`; `SymbolResolver` and `DeclarationResolver`
+already resolve property-access symbols and declarations.
+
+**Property-access model (asserted by this test):**
+
+```text
+ts.PropertyAccessExpression
+  .expression : ts.Expression   ← the object (Identifier, CallExpression,
+                                  PropertyAccessExpression, ElementAccessExpression, …)
+  .name       : ts.Identifier   ← the property (right-hand identifier)
+```
+
+The D11 test exposes both `.expression` and `.name` so a reader can
+verify that the *object* of a property-access is described by its own
+AST kind, never flattened. Crucially:
+
+- `HttpStatus.CREATED` is `PropertyAccessExpression(object=Identifier HttpStatus, name=CREATED)` — **NOT** `number 201`, **NOT** `identifier CREATED`, **NOT** `string "HttpStatus.CREATED"`.
+- `Config.Http.Status.OK` is `PropertyAccessExpression(object=PropertyAccessExpression(...), name=OK)` — the chain is preserved structurally (`isNested: true`).
+- `factory().value` is `PropertyAccessExpression(object=CallExpression(factory()), name=value)`.
+- `items[0].value` is `PropertyAccessExpression(object=ElementAccessExpression(...), name=value)`.
+
+Test command:
+
+```bash
+pnpm test:nest:property
+# or directly:
+tsx packages/provider-nestjs/test/property-access.test.ts
+```
+
+MATCH OUTPUT — Part A (synthetic forms and boundaries, abridged):
+
+```text
+===== D11 PART A — SYNTHETIC PROPERTY-ACCESS FORMS =====
+
+--- PropAccess.m1 (HttpStatus.CREATED) ---
+  kind: property-access | objectKind: Identifier | objectText: HttpStatus | property: CREATED | isNested: false
+  ExpressionInspector.kind: property-access
+--- PropAccess.m2 (CREATED) ---
+  kind: identifier | name: CREATED
+  ExpressionInspector.kind: identifier                          ← NOT collapsed
+--- PropAccess.m3 ("HttpStatus.CREATED") ---
+  kind: string-literal | value: "HttpStatus.CREATED"
+  ExpressionInspector.kind: string                             ← NOT collapsed
+--- PropAccess.m4 (HttpStatus.CREATED, HttpStatus.OK, Config.DEFAULT) ---
+  argumentCount: 3, source order preserved, all property-access
+--- PropAccess.m5 (Config.Http.Status.OK) ---
+  kind: property-access | objectKind: PropertyAccessExpression | objectText: Config.Http.Status | property: OK | isNested: true
+  ExpressionInspector.kind: property-access
+--- PropAccess.m6 ([HttpStatus.CREATED, HttpStatus.OK]) ---
+  kind: array, items: [property-access, property-access] (NOT flattened)
+--- PropAccess.m7 ({status: HttpStatus.CREATED, success: Config.DEFAULT}) ---
+  kind: object, both values → property-access
+--- PropAccess.m8 ({response: {status: HttpStatus.CREATED}}) ---
+  kind: object, response → object, status → property-access   (deeply nested, preserved)
+--- PropAccess.m9 vs m10 (Config.DEFAULT vs Config.getDefault()) ---
+  m9: property-access  | m10: call                             (clearly distinct)
+--- PropAccess.m11 vs m12 (namespace.AuthGuard vs namespace["AuthGuard"]) ---
+  m11: property-access | ExpressionInspector.kind: property-access
+  m12: element-access  | ExpressionInspector.kind: unknown      ← KNOWN GAP
+--- PropAccess.m13 (factory().value) ---
+  kind: property-access | objectKind: CallExpression | objectText: factory() | property: value
+  ExpressionInspector.kind: property-access
+--- PropAccess.m14 (items[0].value) ---
+  kind: property-access | objectKind: ElementAccessExpression | objectText: items[0] | property: value
+  ExpressionInspector.kind: property-access
+--- PropAccess.m15 (user.role) ---
+  kind: property-access | objectKind: Identifier | objectText: user | property: role
+--- PropAccess.m16 (config.default) ---
+  kind: property-access | property: default                    (no special name handling)
+```
+
+MATCH OUTPUT — Part B (real NestJS three-layer resolution):
+
+```text
+===== D11 PART B — REAL NESTJS @HttpCode PROPERTY-ACCESS =====
+
+--- Expression: HttpStatus.OK       (CartController.addItem) ---
+  ExpressionInspector.kind: property-access
+  SymbolResolver  : name=OK | flags=8
+  DeclarationResolver: 1 declaration(s): [EnumMember]
+  First declaration kind: EnumMember
+
+--- Expression: HttpStatus.CREATED  (OrdersController.create / ProductsController.create) ---
+  ExpressionInspector.kind: property-access
+  SymbolResolver  : name=CREATED | flags=8
+  DeclarationResolver: 1 declaration(s): [EnumMember]
+  First declaration kind: EnumMember
+
+--- Expression: HttpStatus.NO_CONTENT (ProductsController.remove) ---
+  ExpressionInspector.kind: property-access
+  SymbolResolver  : name=NO_CONTENT | flags=8
+  DeclarationResolver: 1 declaration(s): [EnumMember]
+  First declaration kind: EnumMember
+```
+
+All four real NestJS `@HttpCode(HttpStatus.*)` decorators classify
+as `kind: property-access`, **NOT** as `number`, `identifier`, or
+`string`. The three-layer architecture resolves each to its
+`EnumMember` declaration.
+
+Verification matrix:
+
+| Required | Expected | Actual | Result |
+|---|---|---|---|
+| `@Decorator(HttpStatus.CREATED)` | `property-access` | `property-access, object: HttpStatus, property: CREATED` | **PASS** |
+| `@Decorator(CREATED)` | `identifier` (NOT property-access) | `identifier` | **PASS** |
+| `@Decorator("HttpStatus.CREATED")` | `string` (NOT property-access) | `string-literal` | **PASS** |
+| `@Decorator(HttpStatus.CREATED, HttpStatus.OK, Config.DEFAULT)` | 3 in source order | `property-access × 3` in order | **PASS** |
+| `@Decorator(Config.Http.Status.OK)` | nested property-access chain | `isNested: true, objectKind: PropertyAccessExpression` | **PASS** |
+| `@Decorator([HttpStatus.CREATED, HttpStatus.OK])` | array(2 property-accesses) NOT flattened | `array, items: [property-access, property-access]` | **PASS** |
+| `{status: HttpStatus.CREATED, success: Config.DEFAULT}` | object with property-access values | both properties → property-access | **PASS** |
+| `{response: {status: HttpStatus.CREATED}}` | nested object preserving property-access | `object → object → status → property-access` | **PASS** |
+| `@Decorator(Config.DEFAULT)` vs `@Decorator(Config.getDefault())` | property-access vs call | both correctly distinguished | **PASS** |
+| `@Decorator(namespace.AuthGuard)` vs `namespace["AuthGuard"]` | property-access vs element-access | both structurally distinct; inspector `property-access` for first, `unknown` for second (gap) | **PASS — gap noted** |
+| `@Decorator(factory().value)` | `property-access` whose object is call | `objectKind: CallExpression, objectText: factory()` | **PASS** |
+| `@Decorator(items[0].value)` | `property-access` whose object is element-access | `objectKind: ElementAccessExpression, objectText: items[0]` | **PASS** |
+| `@Decorator(user.role)` | `property-access` with identifier object | `objectKind: Identifier, property: role` | **PASS** |
+| `@Decorator(config.default)` | no special-name handling | `property-access, property: default` | **PASS** |
+| Real NestJS `@HttpCode(HttpStatus.CREATED/OK/NO_CONTENT)` | `property-access` (NOT number / identifier / string) | all four report `property-access` | **PASS** |
+| **Three-layer resolution** | inspector → property-access, symbol → name, declaration → EnumMember | all four: `kind: property-access, name: <member>, declaration: EnumMember` | **PASS** |
+
+Other verification:
+- **Typecheck:** PASS — `tsc 5.9.3` exit=0 for both `provider-ast`
+  and `provider-nestjs`.
+- **D2 regression:** order test → 33 lines.
+- **D3 regression:** zero-arguments test → 47 lines.
+- **D4 regression:** one-argument test → 68 lines.
+- **D5 regression:** multiple-arguments test → 81 lines.
+- **D6 regression:** string-literals test → 131 lines.
+- **D7 regression:** numeric-literals test → 117 lines.
+- **D8 regression:** boolean-literals test → 118 lines.
+- **D9 regression:** null-literals test → 122 lines.
+- **D10 regression:** identifier-expressions test → 85 lines.
+- **`expression.test.ts` regression:** `m: prefix-unary | AST: -10`
+  still printed.
+- **`symbol.test.ts` regression:** exit 0.
+- **`declaration.test.ts` regression:** exit 0.
+- **Diff:** minimal — 1 new test file (`property-access.test.ts`) +
+  1 line in `package.json`. No production code modified.
+
+Known findings (per D11 spec, **NOT fixed in this step**):
+
+1. **`ExpressionInspector` does not classify `ElementAccessExpression`**
+   (e.g. `namespace["AuthGuard"]`, `items[0]`). The production
+   inspector returns `kind: "unknown"` for these. The D11 test view
+   classifies them structurally as `element-access` (preserving
+   `object` and `argument`), but does not add a production branch.
+   Per D11 spec: *"If ExpressionInspector currently returns unknown
+   for element-access, record that as a known gap. Do not fix the gap
+   as part of D11 unless the approved architecture explicitly requires
+   it."*
+2. **`PropertyAccessExpression` whose object is itself a
+   `PropertyAccessExpression` is correctly preserved by the
+   structural test view (`isNested: true`); the production inspector
+   has always reported `property-access` for the top-level. No gap.
+3. **Optional chaining (`value?.foo`) and non-null assertion
+   (`value!`)** are not added speculatively. They fall through to the
+   inspector's `unknown` branch and the test view classifies them
+   structurally if encountered.
+
+Architectural note (no fix needed):
+- `ExpressionInspector`'s `ts.isPropertyAccessExpression` branch
+  returns `kind: "property-access"`. The test view surfaces the
+  object, the property, and whether the object is itself a
+  property-access expression (the `isNested` flag), without
+  duplicating resolver logic.
+- `SymbolResolver` and `DeclarationResolver` are invoked only on the
+  property-access nodes themselves; no resolver logic is added to
+  `ExpressionInspector`. The three-layer architecture is preserved.
+
+Commit:
+- `test(provider-nestjs): audit property-access decorator arguments`
+
+---
+
 ## D11 — Property access
 
 Test:
