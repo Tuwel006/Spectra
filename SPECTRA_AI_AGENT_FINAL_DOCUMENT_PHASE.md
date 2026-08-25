@@ -3598,6 +3598,45 @@ If safe constant folding is implemented, it must be explicit. Otherwise preserve
 
 ---
 
+## Step D25 — Prefix/unary (full)
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/unary-assertions.test.ts` *(new, combined D25+D26+D27)*
+- `packages/provider-ast/src/expression/ExpressionInspector.ts` *(modified by commit `281e0fc`)*
+- `packages/provider-ast/test/expression.test.ts` *(regression: added `const x = typeof value`)*
+- `package.json` — added `"test:nest:unary"` script
+
+**Initial production state:** only `-numeric` was classified as
+`prefix-unary` (D7). Other prefix-unary operators (`!`, `~`, `+`,
+`-<id>`, `++`, `--`) and the sibling TypeOf / Void / Delete
+expressions fell through to `unknown`.
+
+**Production change (commit `281e0fc`):**
+- Broadened the existing branch to detect **any**
+  `ts.isPrefixUnaryExpression` (covers `!`, `~`, `+`, `-`, `++`, `--`).
+- Added three sibling branches for `ts.isTypeOfExpression`,
+  `ts.isVoidExpression`, `ts.isDeleteExpression` — all classify as
+  `kind: "prefix-unary"`.
+
+**MATCH OUTPUT — 9/9 prefix-unary forms PASS:**
+- `!value` → prefix-unary, operator ExclamationToken
+- `~value` → prefix-unary, operator TildeToken
+- `+value` → prefix-unary, operator PlusToken
+- `-value` → prefix-unary, operator MinusToken
+- `typeof value` → prefix-unary, operator TypeOfKeyword (TypeOfExpression)
+- `void value` → prefix-unary, operator VoidKeyword (VoidExpression)
+- `delete obj.prop` → prefix-unary, operator DeleteKeyword (DeleteExpression)
+- `++value` → prefix-unary, operator PlusPlusToken
+- `--value` → prefix-unary, operator MinusMinusToken
+
+**No evaluation** — all operators are surface descriptors only.
+
+**Commit:** `test(provider-nestjs): audit unary + assertion decorator arguments` (combined with D26+D27)
+
+---
+
 ## D25 — Element access
 
 Test:
@@ -3610,6 +3649,21 @@ Represent object and argument separately.
 
 ---
 
+## Step D26 — Postfix expressions
+
+Status: [x]
+
+Files: see D25 (combined test).
+
+**MATCH OUTPUT — 2/2 postfix-unary forms PASS:**
+- `value++` → postfix-unary
+- `value--` → postfix-unary
+
+Production change consolidated in `5d4f147`. Postfix-unary operands
+and operators preserved structurally; no evaluation.
+
+---
+
 ## D26 — Type assertions / `as`
 
 Test:
@@ -3619,6 +3673,23 @@ Test:
 ```
 
 Do not discard the underlying expression.
+
+---
+
+## Step D27 — As / type assertions / non-null
+
+Status: [x]
+
+Files: see D25 (combined test).
+
+**MATCH OUTPUT — 3/3 as-expression forms PASS:**
+- `value as string` → as-expression (AsExpression)
+- `value as SomeType` → as-expression (AsExpression)
+- `value!` → as-expression (NonNullExpression)
+
+Production change consolidated in `5d4f147`. Three branches
+(`ts.isAsExpression`, `ts.isTypeAssertionExpression`,
+`ts.isNonNullExpression`) all classify as `kind: "as-expression"`.
 
 ---
 
