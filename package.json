@@ -32,6 +32,7 @@
     "test:nest:call": "tsx packages/provider-nestjs/test/call-expressions.test.ts",
     "test:nest:array": "tsx packages/provider-nestjs/test/array-expressions.test.ts",
     "test:nest:object": "tsx packages/provider-nestjs/test/object-literals.test.ts",
+    "test:nest:template": "tsx packages/provider-nestjs/test/template-literals.test.ts",
     "test:ast:expression": "tsx packages/provider-ast/test/expression.test.ts",
     "test:nest:symbol": "tsx packages/provider-nestjs/test/symbol.test.ts",
     "test:nest:declaration": "tsx packages/provider-nestjs/test/declaration.test.ts",

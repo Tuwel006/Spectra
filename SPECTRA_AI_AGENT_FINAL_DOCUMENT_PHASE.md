@@ -3294,6 +3294,58 @@ Represent each property and nested expression structurally.
 
 ---
 
+## Step D16 — Template literals
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/template-literals.test.ts` *(new)*
+- `package.json` — added `"test:nest:template"` script
+- `packages/provider-ast/src/expression/ExpressionInspector.ts` *(modified by the consolidated D16-D29 production commit `5d4f147`)*
+
+**Step ordering note:** per the user's explicit instruction, this
+D16 step is performed on **template literals** rather than the
+original spec's "object shorthand" (which is exercised by D15 above).
+
+**Initial production state:** `ExpressionInspector` returned
+`kind: "unknown"` for `ts.NoSubstitutionTemplateLiteral` and
+`ts.TemplateExpression`. The D0 audit noted this as a known gap.
+
+**Production deficiency:** confirmed and fixed (consolidated in the
+D16-D29 production commit `5d4f147`). New `template` kind added to
+`ExpressionKind` and to `inspect(...)` with two branches
+(`isNoSubstitutionTemplateLiteral` → `template`,
+`isTemplateExpression` → `template`).
+
+**Test command:**
+```bash
+pnpm test:nest:template
+```
+
+**MATCH OUTPUT — 9/9 PASS:**
+- `\`hello\`` → `template`, 0 spans
+- `\`users/${id}\`` → `template`, 1 span (id interpolation preserved structurally)
+- `\`${prefix}/users\`` → `template`, 1 span (prefix interpolation)
+- `\`simple-text\`` → `template`, 0 spans
+- `\`${HttpStatus.CREATED}\`` → `template`, 1 span (property-access inside)
+- `\`${factory()}\`` → `template`, 1 span (call inside)
+- `\`${cond ? "a" : "b"}\`` → `template`, 1 span (conditional inside, NOT evaluated)
+- `\`${a} and ${b}\`` → `template`, 2 spans
+- `\`users/${id}/profile\`` → `template`, 1 span
+
+**Implementation note:** the JS template-literal / TS template-literal
+nesting requires the TS source to be written to a temp file with the
+TS backticks escaped via `\`\`` joining; otherwise the JS host
+evaluates the `${...}` interpolations.
+
+**Regression:** D2-D15 all green. `expression.test.ts` a–n intact
+(template regression not added there because of the same JS/TS
+template-literal collision; the D16 test itself is the regression).
+
+**Commit:** `test(provider-nestjs): audit template-literal decorator arguments`
+
+---
+
 ## D16 — Object shorthand
 
 Test:
