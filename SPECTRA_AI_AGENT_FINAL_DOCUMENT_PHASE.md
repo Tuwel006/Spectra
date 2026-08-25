@@ -3359,6 +3359,40 @@ Expected property value is `Identifier(role)`, not automatically the string `adm
 
 ---
 
+## Step D17 — Regex literals
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/regex-literals.test.ts` *(new)*
+- `package.json` — added `"test:nest:regex"` script
+
+**Initial production state:** `ExpressionInspector` returned
+`kind: "unknown"` for `ts.RegularExpressionLiteral`. Fixed in the
+D16-D29 production commit `5d4f147`.
+
+**Test command:**
+```bash
+pnpm test:nest:regex
+```
+
+**MATCH OUTPUT — 12/12 regex literals PASS:**
+- `/abc/` → regex, source + pattern preserved
+- `/^test$/i` → regex, flags preserved
+- `/[a-z]+/g` → regex
+- `/a/, /b/i, /c/g` → three regexes, each with its own flags
+- `[/abc/, /def/]` → array of two regex literals
+- `{ pattern: /test/ }` → object with regex property value
+- `argumentCount` for multi-regex decorators is correct (top-level count, not flattened)
+
+**No string coercion.** No regex evaluation.
+
+**Regression:** D2-D16 all green.
+
+**Commit:** `test(provider-nestjs): audit regex-literal decorator arguments`
+
+---
+
 ## D17 — Object spread
 
 Test:
