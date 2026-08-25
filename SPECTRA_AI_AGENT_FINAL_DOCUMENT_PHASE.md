@@ -3504,6 +3504,42 @@ Normalize safely while preserving AST where required.
 
 ---
 
+## Step D23 — Conditional expressions
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/conditional-binary.test.ts` *(new, combined D23+D24)*
+- `package.json` — added `"test:nest:compound"` script
+
+**Initial production state:** `ExpressionInspector` returned
+`kind: "unknown"` for `ts.ConditionalExpression`. Fixed in the
+D16-D29 production commit `5d4f147`.
+
+**Test command:**
+```bash
+pnpm test:nest:compound
+```
+
+**MATCH OUTPUT — 6/6 conditional expressions PASS:**
+- `condition ? A : B` → conditional
+- `condition ? true : false` → conditional
+- `condition ? null : "x"` → conditional
+- `condition ? factory() : otherFactory()` → conditional
+- `cond1 ? cond2 ? A : B : C` (nested) → conditional
+- `cond ? (a + b) : (c - d)` → conditional
+
+Conditionals inside arrays and objects are surfaced structurally as
+their containing array/object kind with the conditional preserved as a
+child element/property value.
+
+**No evaluation** — the condition, whenTrue, and whenFalse branches
+are surfaced structurally only.
+
+**Commit:** `test(provider-nestjs): audit conditional + binary decorator arguments` (combined with D24)
+
+---
+
 ## D23 — Conditional expressions
 
 Test:
@@ -3513,6 +3549,39 @@ Test:
 ```
 
 Represent condition, true branch, and false branch. Never execute the condition.
+
+---
+
+## Step D24 — Binary expressions
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/conditional-binary.test.ts` *(new, combined D23+D24)*
+- `package.json` — added `"test:nest:compound"` script
+
+**Initial production state:** `ExpressionInspector` returned
+`kind: "unknown"` for `ts.BinaryExpression`. Fixed in the D16-D29
+production commit `5d4f147`.
+
+**MATCH OUTPUT — 11/11 binary expressions PASS:**
+- `1 + 2` → binary (PlusToken) — NOT evaluated to 3
+- `a === b` → binary (EqualsEqualsEqualsToken)
+- `a !== b` → binary (ExclamationEqualsEqualsToken)
+- `a > b && a < c` → binary (AmpersandAmpersandToken) — pre-evaluated left NOT executed
+- `a || b` → binary (BarBarToken)
+- `a ?? b` → binary (QuestionQuestionToken)
+- `a & b | c ^ d` → binary (BarToken, top-level preserved)
+- `a << 2` → binary (LessThanLessThanToken)
+- `a in b` → binary (InKeyword)
+- `a instanceof Foo` → binary (InstanceOfKeyword)
+- `2 ** 3` → binary (AsteriskAsteriskToken) — NOT evaluated to 8
+
+All 11 operator categories preserved: arithmetic, comparison,
+logical, nullish-coalescing, bitwise, in, instanceof, exponentiation.
+Operators NEVER executed.
+
+**Commit:** (combined with D23)
 
 ---
 
