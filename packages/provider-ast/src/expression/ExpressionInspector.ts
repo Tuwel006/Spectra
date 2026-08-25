@@ -50,10 +50,17 @@ export class ExpressionInspector {
             };
         }
 
+        if (ts.isPrefixUnaryExpression(expression)) {
+            return {
+                kind: "prefix-unary",
+                node: expression,
+            };
+        }
+
         if (
-            ts.isPrefixUnaryExpression(expression) &&
-            expression.operator === ts.SyntaxKind.MinusToken &&
-            ts.isNumericLiteral(expression.operand)
+            ts.isTypeOfExpression(expression) ||
+            ts.isVoidExpression(expression) ||
+            ts.isDeleteExpression(expression)
         ) {
             return {
                 kind: "prefix-unary",

@@ -56,6 +56,8 @@ const source = ts.createSourceFile(
         const v = value as string;
 
         const w = [...guards];
+
+        const x = typeof value;
     `,
     ts.ScriptTarget.Latest,
     true,
