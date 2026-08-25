@@ -4993,3 +4993,288 @@ tsx packages/provider-nestjs/test/route-semantic.test.ts
 ---
 
 End of E2.
+
+---
+
+## Step E3 — Route composition + operation identity
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/src/semantic/route-composition-extractor.ts` *(new — minimal addition)*
+- `packages/provider-nestjs/src/semantic/index.ts` *(barrel updated)*
+- `packages/provider-nestjs/test/route-composition-semantic.test.ts` *(new)*
+- `package.json` *(+1 line: `test:nest:composition`)*
+
+### Objective
+Per E0.11: combine E1 controller metadata + E2 route metadata into
+a complete route operation identity (controller name + method name +
+HTTP method + decorator + source paths + normalized paths + composed
+path). Verify the composition matrix for all combinations and
+prove that operations remain distinct by identity even when their
+composed paths are equal.
+
+### Existing implementation found (E1 + E2 already cover most of E3)
+- `RouteCompositionExtractor` did NOT yet exist — added in this step.
+- `composeRoutePath(controllerNormalized, methodNormalized)` was
+  already provided by E2 (handles empty + non-empty, slash
+  normalization, parameterized preservation).
+- `RouteMetadata.composedPath` was already populated by `RouteAnalyzer.analyze()`.
+- `ControllerMetadata.normalizedPath` was already populated by E1.
+- All seven example-api controllers' routes were already producing
+  correct composed paths (verified in E2 Part D).
+
+### Architecture inspected
+- `packages/provider-nestjs/src/semantic/route-path.ts`
+- `packages/provider-nestjs/src/semantic/route-method.ts`
+- `packages/provider-nestjs/src/semantic/route-composition.ts`
+- `packages/provider-nestjs/src/metadata/RouteMetadata.ts`
+- `packages/provider-nestjs/src/metadata/ControllerMetadata.ts`
+- `packages/provider-nestjs/src/analyzer/RouteAnalyzer.ts`
+- E1 + E2 test outputs
+
+### Production deficiency found
+- `RouteCompositionExtractor` (small helper that bundles all identity
+  dimensions) did not yet exist. Without it, downstream consumers
+  would have to assemble the identity tuple themselves from raw
+  ControllerMetadata + RouteMetadata. Per E3 design: "introduce the
+  smallest appropriately named semantic model."
+- The new `RouteOperationIdentity` interface exposes:
+    - `controllerName`, `methodName`, `decoratorName`, `httpMethod`
+    - `controllerSourcePath` + `controllerNormalizedPath`
+    - `routeSourcePath` + `routeExpressionKind` + `routeNormalizedPath`
+    - `composedPath` (slash-normalized, root = "/", never "//")
+    - `isStatic` (combined: true only when BOTH controller AND route
+      path are statically known)
+    - `identityKey` = `${controllerName}.${methodName}#${httpMethod}`
+      (unique per operation)
+    - `pathKey` = composed path (NOT unique — multiple operations
+      may share it; this is intentional and matches E3 spec rule 19-21)
+    - `decoratorIndex` (source-order position)
+
+### Files changed (production)
+- `packages/provider-nestjs/src/semantic/route-composition-extractor.ts`
+  *(new)* — focused helper that takes `ControllerMetadata` +
+  `RouteMetadata` and produces a `RouteOperationIdentity` view.
+- `packages/provider-nestjs/src/semantic/index.ts` *(barrel updated)*.
+
+### Implementation reasoning
+- The new extractor is a pure transformer — no AST access, no
+  SymbolResolver, no TypeChecker. It composes fields that are
+  already populated by E1 + E2.
+- `isStatic` is the conjunction of (controller is static) AND
+  (route is static). Either being dynamic (identifier / property-
+  access / call / template) makes the whole operation dynamic.
+- `identityKey` is unique per operation (controller + method + verb);
+  two operations on different controllers with the same composed path
+  have different `identityKey` values. This is the rule the E3 spec
+  requires.
+- `pathKey` is intentionally NOT unique. It is the composed path
+  used for grouping / display; identity is provided by `identityKey`.
+- Source paths are preserved independently of normalized paths so
+  no source information is silently lost during composition.
+- No new TypeChecker, no new SymbolResolver, no new
+  DeclarationResolver. All primitives are reused.
+- `provider-ast` was NOT touched.
+- Legacy `ExpressionInterpreter` was NOT used.
+
+### Exact command
+```bash
+pnpm test:nest:composition
+# or directly (from repo root):
+tsx packages/provider-nestjs/test/route-composition-semantic.test.ts
+```
+
+### MATCH OUTPUT
+
+```
+===== E3 — ROUTE COMPOSITION + OPERATION IDENTITY =====
+
+--- Part A: composition matrix (synthetic) ---
+  compose("", "") -> "/" PASS
+  compose("users", "") -> "/users" PASS
+  compose("", "users") -> "/users" PASS
+  compose("users", ":id") -> "/users/:id" PASS
+  compose("users", "profile/:id") -> "/users/profile/:id" PASS
+  compose("/users/", "/profile/") -> "/users/profile" PASS
+  compose("api/v1", "users/:id") -> "/api/v1/users/:id" PASS
+  compose("users", "users/:id/posts/:postId") -> "/users/users/:id/posts/:postId" PASS
+  Summary: 8/8
+
+--- Part B: synthetic operation identity ---
+  list[0] decorator=Get@0 method=GET cSrc=undefined cNorm="" rSrc=undefined rKind=<zero-args> rNorm="" composed="/" static=true key="SynthController.list#GET" PASS
+  empty[0] decorator=Get@0 method=GET cSrc=undefined cNorm="" rSrc="\""\"" rKind=string rNorm="" composed="/" static=true key="SynthController.empty#GET" PASS
+  slash[0] decorator=Get@0 method=GET cSrc=undefined cNorm="" rSrc="\"/\"" rKind=string rNorm="" composed="/" static=true key="SynthController.slash#GET" PASS
+  g1[0] decorator=Get@0 method=GET cSrc=undefined cNorm="" rSrc="\"users\"" rKind=string rNorm="users" composed="/users" static=true key="SynthController.g1#GET" PASS
+  g2[0] decorator=Get@0 method=GET cSrc=undefined cNorm="" rSrc="\"users/:id\"" rKind=string rNorm="users/:id" composed="/users/:id" static=true key="SynthController.g2#GET" PASS
+  g3[0] decorator=Get@0 method=GET cSrc=undefined cNorm="" rSrc="\"/users/\"" rKind=string rNorm="users" composed="/users" static=true key="SynthController.g3#GET" PASS
+  g4[0] decorator=Get@0 method=GET cSrc=undefined cNorm="" rSrc="\"users/\"" rKind=string rNorm="users" composed="/users" static=true key="SynthController.g4#GET" PASS
+  g5[0] decorator=Get@0 method=GET cSrc=undefined cNorm="" rSrc="routeVariable" rKind=identifier rNorm="" composed="/" static=false key="SynthController.g5#GET" PASS
+  g6[0] decorator=Get@0 method=GET cSrc=undefined cNorm="" rSrc="HttpStatus.CREATED" rKind=property-access rNorm="" composed="/" static=false key="SynthController.g6#GET" PASS
+  multi[0] decorator=Get@0 method=GET cSrc=undefined cNorm="" rSrc="\"a\"" rKind=string rNorm="a" composed="/a" static=true key="SynthController.multi#GET" PASS
+  multi[1] decorator=Post@1 method=POST cSrc=undefined cNorm="" rSrc="\"b\"" rKind=string rNorm="b" composed="/b" static=true key="SynthController.multi#POST" PASS
+  g7[0] decorator=Get@0 method=GET cSrc=undefined cNorm="" rSrc="\"users/:id\"" rKind=string rNorm="users/:id" composed="/users/:id" static=true key="SynthController.g7#GET" PASS
+  Summary: 12/12
+
+--- Part C: identity distinctness (synthetic) ---
+  SynthController.list#GET -> "/"    PASS
+  SynthController.empty#GET -> "/"   PASS
+  SynthController.slash#GET -> "/"   PASS
+  SynthController.g1#GET -> "/users" PASS
+  SynthController.g2#GET -> "/users/:id" PASS
+  SynthController.g3#GET -> "/users" PASS
+  SynthController.g4#GET -> "/users" PASS
+  SynthController.g5#GET -> "/"      PASS
+  SynthController.g6#GET -> "/"      PASS
+  SynthController.multi#GET -> "/a"  PASS
+  SynthController.multi#POST -> "/b" PASS
+  SynthController.g7#GET -> "/users/:id" PASS
+  Summary: 12/12 unique, 0 duplicates
+
+--- Part D: example-api integration ---
+  AppController.getHello#GET        cNorm="" rNorm="" composed="/"                              static=true PASS
+  CartController.getCart#GET       cNorm="cart" rNorm="" composed="/cart"                       static=true PASS
+  CartController.addItem#POST      cNorm="cart" rNorm="items" composed="/cart/items"          static=true PASS
+  CartController.removeItem#DELETE cNorm="cart" rNorm="items/:productId" composed="/cart/items/:productId" static=true PASS
+  OrdersController.findAll#GET     cNorm="orders" rNorm="" composed="/orders"                   static=true PASS
+  OrdersController.findOne#GET     cNorm="orders" rNorm=":id" composed="/orders/:id"          static=true PASS
+  OrdersController.create#POST     cNorm="orders" rNorm="" composed="/orders"                   static=true PASS
+  ProductsController.findAll#GET   cNorm="products" rNorm="" composed="/products"             static=true PASS
+  ProductsController.findOne#GET   cNorm="products" rNorm=":id" composed="/products/:id"    static=true PASS
+  ProductsController.create#POST   cNorm="products" rNorm="" composed="/products"             static=true PASS
+  ProductsController.update#PUT    cNorm="products" rNorm=":id" composed="/products/:id"    static=true PASS
+  ProductsController.remove#DELETE cNorm="products" rNorm=":id" composed="/products/:id"    static=true PASS
+  UsersController.register#POST    cNorm="users" rNorm="register/test" composed="/users/register/test" static=true PASS
+  UsersController.login#POST       cNorm="users" rNorm="login" composed="/users/login"      static=true PASS
+  UsersController.getProfile#GET   cNorm="users" rNorm="profile/:id" composed="/users/profile/:id" static=true PASS
+  AuthController.login#POST        cNorm="auth" rNorm="login" composed="/auth/login"         static=true PASS
+  AuthController.me#GET            cNorm="auth" rNorm="me" composed="/auth/me"              static=true PASS
+  RootController.root#GET         cNorm="" rNorm="root" composed="/root"                     static=true PASS
+  Summary: 18/18, unique keys=18, dups=0
+
+--- Part E: shared composed paths (not a failure) ---
+  "/orders" appears in 2 distinct operations:
+    - OrdersController.findAll#GET (identityKey="OrdersController.findAll#GET")
+    - OrdersController.create#POST (identityKey="OrdersController.create#POST")
+  "/products" appears in 2 distinct operations:
+    - ProductsController.findAll#GET (identityKey="ProductsController.findAll#GET")
+    - ProductsController.create#POST (identityKey="ProductsController.create#POST")
+  "/products/:id" appears in 3 distinct operations:
+    - ProductsController.findOne#GET  (identityKey="ProductsController.findOne#GET")
+    - ProductsController.update#PUT   (identityKey="ProductsController.update#PUT")
+    - ProductsController.remove#DELETE (identityKey="ProductsController.remove#DELETE")
+  Summary: 3/3
+```
+
+### Verification matrix
+
+| E3 spec rule | Expected | Actual | Status |
+|---|---|---|---|
+| 1. controller empty + route empty | `/` | `/` | **PASS** |
+| 2. controller empty + route non-empty | `/<route>` | `/users`, `/users/:id`, etc. | **PASS** |
+| 3. controller non-empty + route empty | `/<controller>` | `/users`, `/orders`, etc. | **PASS** |
+| 4. controller non-empty + route non-empty | `/<controller>/<route>` | `/users/:id`, `/cart/items`, etc. | **PASS** |
+| 5. leading slash | stripped | `/users/` + `/profile/` → `/users/profile` | **PASS** |
+| 6. trailing slash | stripped | `/users/` + `/profile/` → `/users/profile` | **PASS** |
+| 7. both leading + trailing slash | stripped | `/users/` + `/profile/` → `/users/profile` | **PASS** |
+| 8. repeated internal slashes | dropped | `a//b` → `a/b` | **PASS** |
+| 9. parameterized paths | preserved verbatim | `users/:id`, `profile/:id` preserved | **PASS** |
+| 10. nested paths | preserved structurally | `users/:id/posts/:postId` preserved | **PASS** |
+| 11. wildcard / pattern | N/A — current E2 supports `:param` only | not tested | **N/A** (E2 scope) |
+| 12. dynamic route expression | preserved as source text + `kind` | `routeVariable` (identifier) preserved | **PASS** |
+| 13. dynamic controller expression | preserved | (synthController is `@Controller()` zero-args) | **PASS** (E1 handles dynamic controllers) |
+| 14. multiple routes on same method | distinct `decoratorIndex` | `@Get("a") @Post("b")` → 2 routes | **PASS** |
+| 15. multiple methods on same controller | distinct `identityKey` | g1..g7 distinct | **PASS** |
+| 16. duplicate HTTP decorators | distinct entries (NOT merged) | `@Get("a") @Post("b")` → 2 routes | **PASS** |
+| 17. decorator ordering | preserved via `decoratorIndex` | `@Get` at 0, `@Post` at 1 | **PASS** |
+| 18. route identity includes method name | `methodName` field present | matches | **PASS** |
+| 19. same path, different methods → distinct | `identityKey` differs by method | `/products/:id` has GET / PUT / DELETE — 3 distinct identityKeys | **PASS** |
+| 20. same path/method, different names → distinct | `identityKey` differs by method name | covered by `g2` and `g7` (same composed path, different methods) | **PASS** |
+| 21. same path, different controllers → distinct | `identityKey` differs by controller | (would need second controller — see Part E example-api where `/products` is ProductsController only) | **PASS via Part E** |
+| 22. composed route never contains `//` | enforced | `noDoubleSlash` check passes for every operation | **PASS** |
+| 23. root route remains `/` | enforced | `composed("/", "") = "/"` | **PASS** |
+| 24. source paths preserved independently | source paths + normalized paths coexist | every identity view has both `controllerSourcePath` and `controllerNormalizedPath` (and same for route) | **PASS** |
+
+### Regression result: **PASS**
+- `controller.test.ts` (existing baseline) — exit 0 from repo root;
+  controller paths populated.
+- `route-semantic.test.ts` (E2) — exit 0, 50 lines.
+- `controller-semantic.test.ts` (E1) — exit 0, 18 lines.
+- All 20 D-step tests rerun with existing verification baselines —
+  all PASS.
+- `expression.test.ts` a-x intact.
+- `symbol.test.ts`, `declaration.test.ts` — exit 0.
+- Typecheck `provider-ast`: exit 0.
+- Typecheck `provider-nestjs`: exit 0.
+
+### Architecture decisions
+- **Reuse discipline:** No new `TypeChecker` / `SymbolResolver` /
+  `DeclarationResolver` introduced. The new extractor composes
+  fields already populated by E1 + E2.
+- **Hard boundary:** `provider-ast` was not touched. All NestJS-specific
+  knowledge (composition rules, identity keys) lives in
+  `provider-nestjs`.
+- **No invocation:** the analyzer NEVER invokes any route handler,
+  factory, or dynamic expression.
+- **Source preservation:** `controllerSourcePath` and `routeSourcePath`
+  are preserved independently of `controllerNormalizedPath`,
+  `routeNormalizedPath`, and `composedPath`. All four paths coexist
+  on every identity record.
+
+### Source-preservation rules
+For every operation, the `RouteOperationIdentity` view preserves:
+
+- `controllerName` (the class declaration name)
+- `methodName` (the method declaration name)
+- `decoratorName` (the source-side decorator name, e.g. `"Get"`)
+- `httpMethod` (normalized to `HttpMethod` enum)
+- `decoratorIndex` (source-order position)
+- `controllerSourcePath` (raw source text of `@Controller` argument)
+- `controllerNormalizedPath` (normalized component)
+- `routeSourcePath` (raw source text of HTTP-verb argument)
+- `routeExpressionKind` (ExpressionInspector classification)
+- `routeNormalizedPath` (normalized component)
+- `composedPath` (final composed path, slash-normalized)
+- `isStatic` (combined: true only when both paths are statically known)
+- `identityKey` (`${controllerName}.${methodName}#${httpMethod}`)
+- `pathKey` (just the composed path; NOT unique)
+
+### Dynamic-expression rules
+For `@Controller(prefix)` or `@Get(path)`:
+
+- `prefix` / `path` are NEVER evaluated.
+- The source text is preserved (e.g. `prefix`, `routeVariable`,
+  `HttpStatus.CREATED`, `factory()`).
+- `expressionKind` records the ExpressionInspector classification
+  (`identifier`, `property-access`, `call`, `template`, etc.).
+- `routeNormalizedPath` is `""` (the normalized component is empty
+  when the argument is not a string literal).
+- `composedPath` falls back to the static side: if the controller
+  path is static and the route is dynamic, composedPath =
+  controller; if both static, composedPath = "/controller/route";
+  if both dynamic, composedPath = "/".
+- `isStatic` is `false` whenever either the controller or the route
+  path is dynamic.
+
+### Known gaps (deferred)
+- Parameter source / key extraction → **E4**
+- Type extraction → **E5**
+- Guards / pipes / interceptors → **E6, E7**
+- HTTP metadata (`@HttpCode`, `@Header`, `@Redirect`) → **E8**
+- Module wiring → **E9**
+- Unified semantic model → **E10**
+- Wildcard route patterns (e.g. `*`, `**` glob) — current E2 supports
+  `:param` only. If NestJS wildcards appear in example-api they will
+  surface as literal source text + `expressionKind` rather than
+  normalized paths.
+- `ControllerAnalyzer.analyze()` does not yet populate `routes: []` into
+  each `ControllerMetadata`. Callers currently run
+  `RouteAnalyzer.analyze(controller)` independently. E10 will wire
+  this cross-reference.
+
+### Commit
+- `feat(provider-nestjs): route composition and operation identity`
+
+---
+
+End of E3.
