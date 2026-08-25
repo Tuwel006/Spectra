@@ -5,7 +5,27 @@ export interface ControllerMetadata {
 
     readonly name: string;
 
+    /**
+     * Normalized controller path component (no leading/trailing
+     * slashes, no duplicate slashes). Empty string when `@Controller`
+     * has no argument.
+     */
     readonly path: string;
+
+    /** Raw source text of the `@Controller` argument, or undefined. */
+    readonly sourcePath: string | undefined;
+
+    /**
+     * Normalized controller path — same as `path` today; will be
+     * combined with route paths in E3.
+     */
+    readonly normalizedPath: string;
+
+    /** ExpressionInspector classification of the `@Controller` argument. */
+    readonly controllerExpressionKind: string;
+
+    /** String-literal value of the `@Controller` argument when applicable. */
+    readonly controllerPathValue: string | undefined;
 
     readonly classNode: ts.ClassDeclaration;
 

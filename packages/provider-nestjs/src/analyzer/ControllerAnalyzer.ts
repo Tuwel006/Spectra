@@ -1,15 +1,33 @@
 import ts from "typescript";
-import { ClassQuery } from "@spectra/provider-ast";
+import { ClassQuery, ExpressionInspector } from "@spectra/provider-ast";
 
 import { ControllerMetadata } from "../metadata";
-import { DecoratorReader } from "../utils";
+import {
+    ControllerPathExtractor,
+} from "../semantic/controller-path";
+import { DecoratorArguments, DecoratorReader } from "../utils";
 
 export class ControllerAnalyzer {
 
+    private readonly pathExtractor: ControllerPathExtractor;
+
     public constructor(
         private readonly classQuery: ClassQuery,
-        private readonly decoratorReader: DecoratorReader,
-    ) { }
+        decoratorReader: DecoratorReader,
+        decoratorArguments?: DecoratorArguments,
+        inspector?: ExpressionInspector,
+    ) {
+        this.pathExtractor = new ControllerPathExtractor(
+            decoratorReader,
+            decoratorArguments ??
+                new DecoratorArguments(),
+            inspector ?? new ExpressionInspector(),
+        );
+        // Keep the existing constructor signature compatible; the
+        // optional args allow callers (and tests) to inject the
+        // dependencies while existing code paths continue to work.
+        void this.classQuery;
+    }
 
     public analyze(
         sourceFile: ts.SourceFile,
@@ -21,13 +39,18 @@ export class ControllerAnalyzer {
 
         for (const classNode of classes) {
 
-            if (!this.decoratorReader.has(classNode, "Controller")) {
+            const pathView = this.pathExtractor.extract(classNode);
+            if (pathView.expressionKind === "<no-decorator>") {
                 continue;
             }
 
             controllers.push({
                 name: classNode.name?.text ?? "Anonymous",
-                path: "",
+                path: pathView.normalized,
+                sourcePath: pathView.sourceText,
+                normalizedPath: pathView.normalized,
+                controllerExpressionKind: pathView.expressionKind,
+                controllerPathValue: pathView.value,
                 classNode,
                 tags: [],
                 routes: [],

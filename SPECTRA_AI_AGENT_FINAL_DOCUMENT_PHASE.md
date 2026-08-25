@@ -4573,4 +4573,173 @@ Each E-step is its own commit. Each is test-only until structural pieces are sta
 
 ---
 
-End of E0 audit.
+## Step E1 — Controller semantic extraction
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/src/semantic/controller-path.ts` *(new)*
+- `packages/provider-nestjs/src/semantic/index.ts` *(new)*
+- `packages/provider-nestjs/src/metadata/ControllerMetadata.ts` *(extended)*
+- `packages/provider-nestjs/src/analyzer/ControllerAnalyzer.ts` *(extended)*
+- `packages/provider-nestjs/src/index.ts` *(extended)*
+- `packages/provider-nestjs/test/controller-semantic.test.ts` *(new)*
+- `package.json` *(+1 line: `test:nest:controller-semantic`)*
+
+### Objective
+Per the E0.11 plan: extract the controller's `@Controller(path)`
+argument into the `ControllerMetadata` model, preserving both source
+information and a normalized component. E3 (route composition) will
+later combine the normalized controller path with each route's
+normalized path.
+
+### Existing implementation found
+- `ControllerAnalyzer.analyze()` already discovered classes with
+  `@Controller`, populated `name`, `classNode`, `tags`, and `routes`,
+  but **left `path: ""`** — incomplete (D0 noted this gap).
+- `ControllerMetadata` exposed only `path: string`.
+- `DecoratorReader.find(node, "Controller")` and
+  `DecoratorArguments.get(decorator)` already exposed the argument
+  list.
+- `ExpressionInspector` (provider-ast) already classified 25+ AST
+  expression kinds.
+
+### Files inspected
+- `packages/provider-nestjs/src/analyzer/ControllerAnalyzer.ts`
+- `packages/provider-nestjs/src/metadata/ControllerMetadata.ts`
+- `packages/provider-nestjs/src/metadata/RouteMetadata.ts`
+- `packages/provider-nestjs/src/utils/DecoratorReader.ts`
+- `packages/provider-nestjs/src/utils/DecoratorArguments.ts`
+- `packages/provider-nestjs/src/utils/index.ts`
+- `packages/provider-ast/src/expression/ExpressionInspector.ts`
+- `packages/provider-nestjs/test/controller.test.ts` (existing baseline)
+
+### Files changed (production)
+- `packages/provider-nestjs/src/semantic/controller-path.ts` — new helper
+  `ControllerPathExtractor` + `ControllerPathView` interface.
+- `packages/provider-nestjs/src/semantic/index.ts` — barrel export.
+- `packages/provider-nestjs/src/metadata/ControllerMetadata.ts` —
+  extended interface (added `sourcePath`, `normalizedPath`,
+  `controllerExpressionKind`, `controllerPathValue`; kept `path`
+  as backward-compatible alias for `normalizedPath`).
+- `packages/provider-nestjs/src/analyzer/ControllerAnalyzer.ts` —
+  constructor signature extended with optional `DecoratorArguments` /
+  `ExpressionInspector` (defaults preserve the existing two-arg call
+  site in `controller.test.ts`); `analyze()` now invokes the new
+  extractor and populates the new fields.
+- `packages/provider-nestjs/src/index.ts` — exports `./semantic`.
+
+### Implementation reasoning
+- `ControllerPathExtractor` is a small focused class that takes
+  `DecoratorReader` + `DecoratorArguments` + `ExpressionInspector`
+  (already-existing provider-ast + provider-nestjs primitives) and
+  produces a `ControllerPathView`. It never evaluates anything;
+  non-string-literal arguments keep their raw `sourceText` and their
+  `expressionKind` for later semantic consumers.
+- Normalization is purely string-level: split on `/`, drop empty
+  segments, re-join. No regex. No AST mutation.
+- `ControllerAnalyzer.analyze()` reuses `ControllerPathExtractor` and
+  keeps the original two-argument constructor signature for the
+  existing `controller.test.ts` (via optional dependency parameters
+  defaulting to fresh instances). Existing public API is preserved.
+- All NestJS-specific knowledge (decorator names, path semantics,
+  normalization rules) lives in `provider-nestjs`. `provider-ast` was
+  not touched.
+- The legacy `ExpressionInterpreter` (provider-nestjs) was NOT used;
+  `ExpressionInspector` (provider-ast) is used as instructed.
+
+### Exact command
+```bash
+pnpm test:nest:controller-semantic
+# or directly:
+tsx packages/provider-nestjs/test/controller-semantic.test.ts
+```
+
+### MATCH OUTPUT
+
+```
+===== E1 — CONTROLLER SEMANTIC EXTRACTION =====
+
+AppController          sourcePath=undefined       kind=<zero-args>  value=undefined     normalized=""            PASS
+ProductsController     sourcePath='products'     kind=string       value="products"     normalized="products"     PASS
+OrdersController       sourcePath='orders'       kind=string       value="orders"       normalized="orders"       PASS
+CartController         sourcePath='cart'         kind=string       value="cart"         normalized="cart"         PASS
+UsersController        sourcePath='users'        kind=string       value="users"        normalized="users"        PASS
+AuthController         sourcePath="auth"         kind=string       value="auth"         normalized="auth"         PASS
+RootController         sourcePath=undefined       kind=<zero-args>  value=undefined     normalized=""            PASS
+
+Summary: 7/7 controllers match expected semantic view
+
+===== E1 — NORMALIZATION RULES =====
+
+m1   args=0          normalized=""        PASS
+m2   source=""        normalized=""        PASS
+m3   source="/"       normalized=""        PASS
+m4   source="users"   normalized="users"   PASS
+m5   source="/users"  normalized="users"   PASS
+m6   source="users/"  normalized="users"   PASS
+m7   source="/users/" normalized="users"   PASS
+m8   source="a//b"    normalized="a/b"     PASS
+m9   source="api/v1"  normalized="api/v1"  PASS
+
+Summary: 9/9 normalization cases match
+```
+
+### Verification matrix
+
+| Case | Expected | Actual | Status |
+|---|---|---|---|
+| `@Controller()` | `sourcePath=undefined, kind=<zero-args>, normalized=""` | matches | **PASS** |
+| `@Controller('products')` | `sourcePath="'products'", kind=string, value="products", normalized="products"` | matches | **PASS** |
+| `@Controller("auth")` (double quotes) | `sourcePath="\"auth\"", kind=string, value="auth", normalized="auth"` | matches | **PASS** |
+| `@Controller('cart')` / `'orders'` / `'users'` | same shape, distinct values | matches | **PASS** |
+| **7 controllers in apps/example-api** | all 7 map to expected semantic views | 7/7 | **PASS** |
+| `""` normalization | `""` | `""` | **PASS** |
+| `"/"` normalization | `""` | `""` | **PASS** |
+| `"users"` normalization | `"users"` | `"users"` | **PASS** |
+| `"/users"` and `"users/"` and `"/users/"` | `"users"` | `"users"` | **PASS** |
+| `"a//b"` (double slash) | `"a/b"` | `"a/b"` | **PASS** |
+| `"api/v1"` (multi-segment) | `"api/v1"` | `"api/v1"` | **PASS** |
+
+### Regression result: **PASS**
+- `controller.test.ts` (existing baseline) — controller paths now
+  correctly populated (e.g. `Path: products`, `Path: orders`).
+- All 20 D-step tests rerun with existing verification baselines —
+  all PASS.
+- `expression.test.ts` a-x intact.
+- `symbol.test.ts`, `declaration.test.ts` exit 0.
+- Typecheck `provider-ast`: exit 0.
+- Typecheck `provider-nestjs`: exit 0.
+
+### Architectural notes
+- No NestJS knowledge in `provider-ast` (unchanged).
+- No duplicate `TypeChecker` / `SymbolResolver` / `DeclarationResolver`.
+- No decorator / guard / factory / constructor invocation.
+- Legacy `ExpressionInterpreter` (provider-nestjs) not used.
+- Source information is **preserved**: `sourcePath` keeps the raw
+  argument text (e.g. `"'products'"` or `'"auth"'`); only the
+  normalized component is computed for `normalizedPath` and the
+  backward-compatible `path`. The `expressionKind` field reports
+  the ExpressionInspector classification so future consumers can
+  re-resolve property-access / call / template / etc. argument
+  forms without losing source.
+- The `path` field is kept for backward compatibility but is now
+  populated by `normalizedPath`.
+
+### Known gaps (not in E1 scope; deferred)
+- HTTP-verb path extraction (route-level) — E2.
+- HTTP method normalization to the `HttpMethod` enum — E2.
+- Route + controller path composition — E3.
+- Parameter source / key extraction — E4.
+- Type extraction — E5.
+- Guards / pipes / interceptors — E6, E7.
+- HTTP metadata (`@HttpCode`, `@Header`, `@Redirect`) — E8.
+- Module wiring — E9.
+- Unified semantic model — E10.
+
+### Commit
+- `feat(provider-nestjs): extract controller path in semantic model`
+
+---
+
+End of E1.
