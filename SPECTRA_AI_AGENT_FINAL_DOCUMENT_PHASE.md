@@ -3239,6 +3239,45 @@ items = [Identifier(AuthGuard), Identifier(AdminGuard)]
 
 ---
 
+## Step D15 — Object literals
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/object-literals.test.ts` *(new)*
+- `package.json` — added `"test:nest:object"` script
+
+**No production-code change was needed.** `ExpressionInspector`
+already returns `kind: "object"` for `ts.isObjectLiteralExpression`.
+
+**Verification matrix (selected):**
+- `{}` → `object`, properties: []
+- `{ enabled: true }` → `object, enabled → boolean-literal true`
+- `{ guard: AuthGuard }` → `object, guard → identifier AuthGuard`
+- `{ status: HttpStatus.CREATED }` → `object, status → property-access HttpStatus.CREATED`
+- `{ guards: [AuthGuard, AdminGuard] }` → `object, guards → array(2 identifiers)`
+- `{ outer: { inner: { guard: JwtAuthGuard } } }` → deeply nested preserved
+- `{ a: 1, b: "x", c: true, d: null }` → mixed primitive kinds preserved
+- `{ name }` → shorthand `{ a (ShorthandPropertyAssignment) → identifier }`
+- `{ ...options }` → spread element surface preserved
+- `{ guard: factory() }` → call value preserved
+- `{ handle: () => true }` → arrow function preserved
+- `{ handle: function () { ... } }` → function expression preserved
+- `{ [key]: value }` → computed key preserved
+- `{ "quoted-key": 1 }` → quoted key preserved
+- `{ method(arg) { return arg; } }` → method property preserved
+
+**Boundary:** `@Decorator({ a: 1, b: 2 })` → `argumentCount: 1` with 2
+properties; `@Decorator(a, b)` → `argumentCount: 2`.
+
+**MATCH OUTPUT** (152 lines, exit 0).
+
+**Regression:** D2–D14 all green. `expression.test.ts` a–n intact.
+
+**Commit:** `test(provider-nestjs): audit object-literal decorator arguments`
+
+---
+
 ## D15 — Object literals
 
 Test:
