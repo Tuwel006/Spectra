@@ -2529,6 +2529,218 @@ Preserve the already verified `HttpStatus.CREATED` behavior.
 
 ---
 
+## Step D12 — Element-access expressions
+
+Status: [x]
+
+Files:
+- `packages/provider-ast/src/expression/ExpressionInspector.ts` *(modified — smallest generic fix)*
+- `packages/provider-ast/test/expression.test.ts` *(regression: added `const n = values["key"]`)*
+- `packages/provider-nestjs/test/element-access.test.ts` *(new)*
+- `package.json` — added `"test:nest:element"` script
+
+**Note on step ordering:** the original master spec lists D12 as
+"Call expressions" and D13 as "New expressions". Per the user's
+explicit instruction, this D12 step is performed on **element-access
+expressions** instead. Call expressions (and the call-expression
+audit) will be executed in a later step, after element-access is
+in place.
+
+**Production deficiency (confirmed and fixed):**
+
+The D0 audit and D10/D11 tests identified that
+`ExpressionInspector.inspect(...)` returned `kind: "unknown"` for
+`ts.ElementAccessExpression` (e.g. `namespace["AuthGuard"]`,
+`values[0]`, `values[key]`). D11 explicitly recorded this as a known
+gap and was instructed not to fix it. D12 fixes it.
+
+**Smallest generic fix in `provider-ast`** (no NestJS semantics):
+
+```diff
+ export type ExpressionKind =
+     | "string"
+     | "number"
+     | "boolean"
+     | "null"
+     | "identifier"
+     | "property-access"
++    | "element-access"
+     | "call"
+     | "object"
+     | "array"
+     | "arrow-function"
+     | "function"
+     | "prefix-unary"
+     | "unknown";
+```
+
+```ts
+if (ts.isElementAccessExpression(expression)) {
+    return {
+        kind: "element-access",
+        node: expression,
+    };
+}
+```
+
+The branch sits immediately after the property-access branch and
+follows the same descriptor style (`{ kind, node }`). No
+resolver logic is added — element-access describes **syntax**;
+`SymbolResolver` / `DeclarationResolver` (D10/D11 architecture) are
+still invoked separately when needed.
+
+**Regression test:** `packages/provider-ast/test/expression.test.ts`
+gains a single new line `const n = values["key"];` whose inspection
+asserts `n: element-access | AST: values["key"]`. All 13 prior kinds
+(a–m) keep their existing classifications.
+
+Test command:
+
+```bash
+pnpm test:nest:element
+# or directly:
+tsx packages/provider-nestjs/test/element-access.test.ts
+```
+
+MATCH OUTPUT — Part A (synthetic element-access forms, abridged):
+
+```text
+===== D12 PART A — SYNTHETIC ELEMENT-ACCESS FORMS =====
+
+--- ElementAccess.m1 (namespace["AuthGuard"]) ---
+  kind: element-access | astKind: ElementAccessExpression | objectKind: Identifier
+              | objectText: namespace | argumentKind: StringLiteral | argumentText: "AuthGuard"
+              ExpressionInspector.kind: element-access
+--- ElementAccess.m2 (values["key"]) ---
+  kind: element-access | argumentKind: StringLiteral
+              ExpressionInspector.kind: element-access
+--- ElementAccess.m3 (values[0]) ---
+  kind: element-access | argumentKind: FirstLiteralToken | argumentText: 0
+              ExpressionInspector.kind: element-access     ← numeric index, NOT property-access
+--- ElementAccess.m4 (values[key]) ---
+  kind: element-access | argumentKind: Identifier | argumentText: key
+              ExpressionInspector.kind: element-access     ← NOT evaluated
+--- ElementAccess.m5 (values[getKey()]) ---
+  kind: element-access | argumentKind: CallExpression | argumentText: getKey()
+              ExpressionInspector.kind: element-access     ← NOT executed
+--- ElementAccess.m6 (namespace.Auth["Guard"]) ---
+  kind: element-access | objectKind: PropertyAccessExpression | objectText: namespace.Auth
+              ExpressionInspector.kind: element-access
+--- ElementAccess.m7 (namespace["Auth"]["Guard"]) ---
+  kind: element-access | objectKind: ElementAccessExpression | objectText: namespace["Auth"]
+              ExpressionInspector.kind: element-access     ← chain preserved
+--- ElementAccess.m8 ([values["a"], values[0]]) ---
+  kind: array, items: [element-access, element-access]   ← NOT flattened
+--- ElementAccess.m9 ({guard: guards["Auth"], status: statuses[201]}) ---
+  kind: object, guard → element-access, status → element-access
+--- ElementAccess.m10 (values[key]()) ---
+  kind: call | callee: values[key]                        ← top-level is call
+              ExpressionInspector.kind: call
+--- ElementAccess.m11 (values[1 + 2]) ---
+  kind: element-access | argumentKind: BinaryExpression | argumentText: 1 + 2
+              ExpressionInspector.kind: element-access     ← NOT evaluated to 3
+--- ElementAccess.m12 (values[condition ? "a" : "b"]) ---
+  kind: element-access | argumentKind: ConditionalExpression
+              ExpressionInspector.kind: element-access     ← NOT evaluated
+```
+
+MATCH OUTPUT — Part B (boundary comparisons):
+
+```text
+===== D12 PART B — BOUNDARY COMPARISONS =====
+
+--- Boundaries.dotForm (namespace.AuthGuard) ---
+  kind: property-access | object: namespace | property: AuthGuard
+              ExpressionInspector.kind: property-access   ← D11 preserved
+--- Boundaries.bracketForm (namespace["AuthGuard"]) ---
+  kind: element-access | object: namespace | argument: "AuthGuard"
+              ExpressionInspector.kind: element-access
+--- Boundaries.identifierOnly (values) ---
+  kind: identifier | name: values
+              ExpressionInspector.kind: identifier
+--- Boundaries.elementAccess (values[key]) ---
+  kind: element-access | object: values | argument: key
+              ExpressionInspector.kind: element-access
+--- Boundaries.elementCall (values[key]()) ---
+  kind: call | callee: values[key]
+              ExpressionInspector.kind: call
+--- Boundaries.stringLiteral ("values") ---
+  kind: string-literal | value: "values"
+              ExpressionInspector.kind: string
+```
+
+Verification matrix:
+
+| Required | Expected | Actual | Result |
+|---|---|---|---|
+| `@Decorator(namespace["AuthGuard"])` | `element-access` | `element-access, object: namespace, argument: "AuthGuard"` | **PASS** |
+| `@Decorator(values["key"])` (string index) | `element-access, argumentKind: StringLiteral` | matches | **PASS** |
+| `@Decorator(values[0])` (numeric index) | `element-access`, NOT property-access | `argumentKind: FirstLiteralToken, argumentText: 0` | **PASS** |
+| `@Decorator(values[key])` (identifier index) | `element-access, argumentKind: Identifier`, NOT evaluated | matches | **PASS** |
+| `@Decorator(values[getKey()])` (call index) | `element-access, argumentKind: CallExpression`, NOT executed | matches | **PASS** |
+| `@Decorator(namespace.Auth["Guard"])` (property-access as object) | `element-access, objectKind: PropertyAccessExpression` | matches | **PASS** |
+| `@Decorator(namespace["Auth"]["Guard"])` (element-access as object) | `element-access, objectKind: ElementAccessExpression`, chain preserved | matches | **PASS** |
+| `@Decorator([values["a"], values[0]])` (array) | `array, items: [element-access, element-access]` | matches | **PASS** |
+| `{guard: guards["Auth"], status: statuses[201]}` (object) | `object, guard → element-access, status → element-access` | matches | **PASS** |
+| `@Decorator(values[key]())` (call) | `call`, NOT element-access | `call, callee: values[key]` | **PASS** |
+| `@Decorator(values[1 + 2])` (binary index) | `element-access`, NOT evaluated to 3 | `argumentKind: BinaryExpression, argumentText: 1 + 2` | **PASS** |
+| `@Decorator(values[condition ? "a" : "b"])` (conditional index) | `element-access`, NOT evaluated | `argumentKind: ConditionalExpression` | **PASS** |
+| **`namespace.AuthGuard` vs `namespace["AuthGuard"]`** | property-access vs element-access | two structurally distinct classifications | **PASS — D11 preserved** |
+| `values` vs `values[key]` | identifier vs element-access | distinct | **PASS** |
+| `values[key]` vs `values[key]()` | element-access vs call | distinct | **PASS** |
+| `"values"` vs `values["key"]` | string vs element-access | distinct | **PASS** |
+
+Other verification:
+- **Typecheck:** PASS — `tsc 5.9.3` exit=0 for both `provider-ast`
+  and `provider-nestjs`.
+- **D2 regression:** order test → 33 lines.
+- **D3 regression:** zero-arguments test → 47 lines.
+- **D4 regression:** one-argument test → 68 lines.
+- **D5 regression:** multiple-arguments test → 81 lines.
+- **D6 regression:** string-literals test → 131 lines.
+- **D7 regression:** numeric-literals test → 117 lines.
+- **D8 regression:** boolean-literals test → 118 lines.
+- **D9 regression:** null-literals test → 122 lines.
+- **D10 regression:** identifier-expressions test → 85 lines.
+- **D11 regression:** property-access test → 100 lines (HttpStatus.CREATED still `property-access`).
+- **`expression.test.ts` regression:** new `n: element-access | AST: values["key"]` line; a–m unchanged.
+- **`symbol.test.ts` regression:** exit 0.
+- **`declaration.test.ts` regression:** exit 0.
+- **Diff:** 1 production branch in `ExpressionInspector` + 1 regression line in `expression.test.ts` + 1 new audit test + 1 line in `package.json`.
+
+Known remaining gaps (carried forward, **NOT fixed in D12**):
+
+1. **`ConditionalExpression`** (e.g. `condition ? a : b`) is still
+   `kind: "unknown"` in `ExpressionInspector`. D11 and D12 tests
+   surface it structurally via the test view but the inspector
+   branch is deferred to a later step (D23 in the spec).
+2. **`BinaryExpression`** is still `kind: "unknown"`. Deferred to D24.
+3. **`PrefixUnaryExpression` with non-`MinusToken` operator** (e.g.
+   `!value`) is still `kind: "unknown"`. D7 only added the
+   `MinusToken + NumericLiteral` branch.
+4. **Optional chaining `value?.foo`** and **non-null assertion
+   `value!`** are not added speculatively; they fall through to
+   `unknown`.
+
+Architectural note:
+- Element-access sits naturally next to property-access in
+  `ExpressionInspector.inspect(...)`; both are `MemberExpression`
+  subclasses in TypeScript's AST but `ExpressionKind` keeps them as
+  separate kinds because their source shapes are distinct (`.x` vs
+  `[x]`).
+- Dynamic indices (`key`, `getKey()`, `1 + 2`, `condition ? "a" : "b"`)
+  are surfaced as the `argumentKind` (e.g. `Identifier`,
+  `CallExpression`, `BinaryExpression`, `ConditionalExpression`) of
+  the element-access. No evaluation happens.
+- `SymbolResolver` and `DeclarationResolver` continue to operate
+  unchanged; their three-layer architecture is preserved.
+
+Commits:
+- `feat(provider-ast): classify element-access expressions`
+- `test(provider-nestjs): audit element-access decorator arguments`
+
+---
+
 ## D12 — Call expressions
 
 Test:
