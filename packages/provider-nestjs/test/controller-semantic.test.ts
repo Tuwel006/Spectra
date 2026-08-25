@@ -201,7 +201,7 @@ const file = ts.createSourceFile(
     syntheticSource,
     ts.ScriptTarget.Latest,
     true,
-    ts.SyntaxKind.TS,
+    ts.ScriptKind.TS,
 );
 const cls = file.statements.find(ts.isClassDeclaration);
 if (!cls) throw new Error("no class");

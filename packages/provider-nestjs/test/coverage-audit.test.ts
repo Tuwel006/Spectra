@@ -58,7 +58,7 @@ const file = ts.createSourceFile(
     source,
     ts.ScriptTarget.Latest,
     true,
-    ts.SyntaxKind.TS,
+    ts.ScriptKind.TS,
 );
 
 console.log("===== D30 — EXPRESSION INSPECTOR COVERAGE MATRIX =====\n");

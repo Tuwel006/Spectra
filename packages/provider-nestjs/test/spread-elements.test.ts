@@ -153,7 +153,7 @@ const file = ts.createSourceFile(
     source,
     ts.ScriptTarget.Latest,
     true,
-    ts.SyntaxKind.TS,
+    ts.ScriptKind.TS,
 );
 
 console.log("===== D29 — SPREAD ELEMENTS + SPECIAL AST =====\n");

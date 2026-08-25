@@ -56,7 +56,7 @@ const file = ts.createSourceFile(
     source,
     ts.ScriptTarget.Latest,
     true,
-    ts.SyntaxKind.TS,
+    ts.ScriptKind.TS,
 );
 
 const cls = file.statements.find(ts.isClassDeclaration);

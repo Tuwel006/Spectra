@@ -145,7 +145,7 @@ const synthFile = ts.createSourceFile(
     syntheticSource,
     ts.ScriptTarget.Latest,
     true,
-    ts.SyntaxKind.TS,
+    ts.ScriptKind.TS,
 );
 
 const synthCls = synthFile.statements.find(ts.isClassDeclaration);

@@ -177,7 +177,7 @@ const synthFile = ts.createSourceFile(
     synthSource,
     ts.ScriptTarget.Latest,
     true,
-    ts.SyntaxKind.TS,
+    ts.ScriptKind.TS,
 );
 const synthCls = synthFile.statements.find(ts.isClassDeclaration);
 if (!synthCls) throw new Error("no class");
