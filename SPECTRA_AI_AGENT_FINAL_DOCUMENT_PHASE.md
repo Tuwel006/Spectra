@@ -3780,6 +3780,60 @@ Do not assume the declaration is directly a class.
 
 ---
 
+## Step D30 — ExpressionInspector coverage audit (final)
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/coverage-audit.test.ts` *(new)*
+- `package.json` — added `"test:nest:coverage"` script
+
+**Coverage matrix:** all 15 expected classification assertions PASS
+across D18-D21 + D28 + safety cases.
+
+**D18 — this / super:**
+- `this` → `unknown` (ThisExpression not separately classified;
+  structurally preserved by test view)
+- `super.foo` → `property-access` (correct — SuperExpression followed
+  by PropertyAccessExpression)
+
+**D19 — class expressions:** all classify as `class`:
+- `class {}` → class
+- `class extends Base {}` → class
+- `class { greet() { ... } }` → class
+- `new (class { run() {} })()` → new (top-level is new, contains class)
+
+**D20 — function expressions:** all classify as `function`:
+- `function () {}` → function
+- `function (a, b) { ... }` → function
+- `function named() { ... }` → function
+
+**D21 — arrow functions:** all classify as `arrow-function`:
+- `() => true`, `x => x`, `(x, y) => x + y`,
+  `() => ({ enabled: true })`, `() => factory()`.
+
+**D28 — await / yield:** only valid in async/generator functions.
+`await expr` and `yield expr` fall into the generic `unknown`
+bucket (AwaitExpression / YieldExpression). The test demonstrates
+they are NOT misclassified as something else.
+
+**No-evaluation safety:** the inspector never executes
+`dangerous()` or similar call expressions inside decorator
+arguments. They are surfaced as `CallExpression` (kind: "call")
+structurally only.
+
+**Known remaining gaps (intentionally deferred):**
+- `ThisExpression` → `unknown` (could be `kind: "this"`)
+- `AwaitExpression` → `unknown` (could be `kind: "await"`)
+- `YieldExpression` → `unknown` (could be `kind: "yield"`)
+- `TaggedTemplateExpression` → `unknown` (could be `kind: "tagged-template"`)
+- `JsxExpression` / `JsxSelfClosingElement` → `unknown` (likely not
+  useful in decorator context)
+
+**Commit:** `test(provider-nestjs): audit expression-coverage matrix`
+
+---
+
 ## D30 — Import alias resolution
 
 Test:
