@@ -4301,3 +4301,276 @@ Do NOT start route generation, Document generation, Studio, or CLI.
 After D0, implement only the next approved step, verify it, update this document, commit it, and STOP.
 
 The goal is a professional, scalable, framework-independent AST foundation followed by a complete NestJS semantic provider and a correct common Document.
+
+---
+
+# PHASE E — NESTJS SEMANTIC EXTRACTION
+
+The D0-D30 phase established a complete structural AST foundation: every decorator is discovered, every expression kind is classified, and no call / constructor / factory is ever executed. This phase uses that foundation to extract a normalized NestJS semantic representation suitable for future document generation. **No production code is added in E0 itself**; E0 is architecture audit only.
+
+---
+
+## Step E0 — NestJS Semantic Extraction Architecture Audit
+
+Status: [x] (audit complete; no production code changed)
+
+### E0.1 — Repository architecture inventory
+
+#### `packages/provider-ast` (framework-independent)
+
+| Component | Responsibility | Reuse? |
+|---|---|---|
+| `AstProject` | loads tsconfig, builds program + checker | yes |
+| `SourceScanner` | lists source files | yes |
+| `NodeWalker` | recursive visitor | yes |
+| `ClassQuery` / `MethodQuery` / `ParameterQuery` | extract nodes by type | yes |
+| `FunctionQuery` / `EnumQuery` / `InterfaceQuery` / `VariableQuery` / `ImportQuery` / `CallExpressionQuery` / `PropertyQuery` / `NodeQuery` | generic AST queries | yes |
+| `SymbolResolver` | `checker.getSymbolAtLocation(node)` | yes — sole resolver |
+| `TypeResolver` | `checker.getTypeAtLocation(node)` | yes — sole type resolver |
+| `DeclarationResolver` | symbol → declarations (with `resolveClass` / `resolveFunction`) | yes — sole declaration resolver |
+| `ExpressionInspector` | classifies 25+ AST kinds structurally | yes — sole expression classifier |
+
+**No duplication rule:** no second `TypeChecker` abstraction, no second `SymbolResolver`, no second `DeclarationResolver`.
+
+#### `packages/provider-nestjs` (NestJS-specific)
+
+| Component | Responsibility | Reuse / Gap |
+|---|---|---|
+| `DecoratorReader` | `getDecorators`, `has`, `find`, `getName` | reuse as-is |
+| `DecoratorArguments` | returns `ts.Expression[]` from a decorator call | reuse as-is |
+| `ExpressionInterpreter` (provider-nestjs/src/utils/) | narrow interpreter for primitives + property-access | **do not use in new code** — it silently normalises and loses source information; use `ExpressionInspector` (provider-ast) instead |
+| `ControllerMetadata` (interface) | name / path / classNode / version / tags / routes | extend (currently `path` is `""` — incomplete) |
+| `RouteMetadata` (interface) | name / path / method / methodNode | extend (currently `path` is `""` — incomplete; method is loose `string`) |
+| `ControllerAnalyzer` | finds classes with `@Controller`; populates name / classNode / path (empty) / routes (empty) | extend — needs path extraction, version support, guard / pipe / interceptor extraction |
+| `RouteAnalyzer` | finds HTTP-verb decorators on methods; populates name / method / path (empty) | extend — needs path extraction, parameter scanning, HTTP metadata, guards / pipes / interceptors |
+
+### E0.2 — NestJS decorator inventory (apps/example-api)
+
+#### Present in example-api
+
+**Class scope**
+- `@Controller()` (AppController, RootController)
+- `@Controller("products")` (ProductsController)
+- `@Controller("cart")` (CartController)
+- `@Controller("orders")` (OrdersController)
+- `@Controller("users")` (UsersController)
+- `@Controller("auth")` (AuthController)
+- `@Module({...})` (AppModule, ProductsModule, CartModule, OrdersModule, UsersModule, AuthModule)
+- `@Injectable()` (AppService, ProductsService, CartService, OrdersService, UsersService, JwtAuthGuard)
+- `@UseGuards(JwtAuthGuard)` (class-level on OrdersController, CartController)
+
+**Method scope**
+- `@Get()`, `@Get(':id')`, `@Get("register/test")`, `@Get("profile/:id")`, `@Get("me")`, `@Get("root")`
+- `@Post()`, `@Post('items')`, `@Post("login")`
+- `@Put(':id')`
+- `@Delete(':id')`, `@Delete('items/:productId')`
+- `@HttpCode(HttpStatus.CREATED)`, `@HttpCode(HttpStatus.OK)`, `@HttpCode(HttpStatus.NO_CONTENT)`
+- `@UseGuards(JwtAuthGuard)` (method-level on UsersController.getProfile, UsersController.me)
+
+**Parameter scope**
+- `@Param('id') id: string`
+- `@Param('productId') productId: string`
+- `@Query('category') category?: string`
+- `@Body() dto: <Dto>` (CreateProductDto, UpdateProductDto, CreateOrderDto, AddToCartDto, CreateUserDto, LoginDto)
+
+#### Not present in example-api
+
+- `@Options()`, `@Head()`, `@All()`, `@Patch()`
+- `@Header(...)`, `@Redirect(...)`, `@Render(...)`
+- `@UseInterceptors(...)`, `@UsePipes(...)`, `@UseFilters(...)`
+- `@SetMetadata(...)`, `@Header(...)`, `@Redirect(...)`
+- `@Headers()`, `@Req()`, `@Res()`, `@Ip()`, `@Session()`, `@HostParam(...)`
+- `@UploadedFile()`, `@UploadedFiles()`
+- `@Catch()`, `@Inject()`, `@Optional()`, `forwardRef(...)`
+- `@Global()`
+
+#### Supported by current architecture
+
+- Class-scope decorator discovery (D1)
+- Method-scope decorator discovery (D1)
+- Parameter-scope decorator discovery (D1, with the known `ParameterQuery` over-reach into lambda parameters documented)
+- Source-order preservation (D2)
+- Zero / one / multiple argument counts (D3, D4, D5)
+- Expression classification across all 25+ kinds (D6-D30)
+
+#### Not yet supported
+
+- Controller path extraction (controller @ argument)
+- Route path extraction (HTTP-verb @ argument)
+- HTTP method normalization (currently loose `string`, should use `HttpMethod` enum from `@spectra/core`)
+- `@HttpCode` value extraction
+- `@Header` / `@Redirect` / `@SetMetadata` extraction
+- Parameter source extraction (`@Param` / `@Query` / `@Body` / `@Headers` / `@Req` / `@Res` / ...)
+- Parameter key extraction (the argument inside `@Param("id")`)
+- Type information via `TypeResolver`
+- Symbol / declaration resolution for guards / pipes / interceptors
+- Module → controller wiring
+- Service / provider scanning
+
+### E0.3 — Semantic categories
+
+| Category | Source AST node | Source decorator | Helper | Available | Missing |
+|---|---|---|---|---|---|
+| Controller metadata | `ts.ClassDeclaration` | `@Controller(path?)` | `DecoratorReader.has`, `DecoratorArguments.get`, `ExpressionInspector` | name | path, version |
+| Route metadata | `ts.MethodDeclaration` | `@Get/@Post/@Put/@Patch/@Delete/@Options/@Head/@All` | `DecoratorReader.has`, `DecoratorArguments.get`, `ExpressionInspector` | name | path |
+| HTTP method | same as route | verb name | `DecoratorReader.has` | string | enum normalization |
+| Route path | same as route | first arg of verb decorator | `DecoratorArguments.get`, `ExpressionInspector` | raw expression | string value extraction |
+| Method name | `method.name.getText()` | — | — | yes | — |
+| Parameter source | `ts.ParameterDeclaration` | `@Param/@Query/@Body/@Headers/@Req/@Res/@Ip/@Session/@HostParam` | `DecoratorReader.has`, `DecoratorReader.find`, `DecoratorArguments.get`, `ExpressionInspector` | arg count, arg expression | kind name, key argument |
+| Parameter key | same | first arg of parameter decorator | `DecoratorArguments.get`, `ExpressionInspector` | raw expression | string value extraction |
+| Parameter type | `ts.ParameterDeclaration.type` | — | `TypeResolver.resolve`, `SymbolResolver`, `DeclarationResolver` | ts.Type | full schema extraction |
+| Guards (method / class) | both | `@UseGuards(args)` | `DecoratorReader.find`, `DecoratorArguments.get` | args list | expression classification per arg |
+| Pipes / Interceptors / Filters | same | `@UsePipes/@UseInterceptors/@UseFilters` | same | args list | same |
+| HTTP status | method | `@HttpCode(...)` | same | arg count | numeric value extraction |
+| Headers | method | `@Header(name, value)` | same | args | string value extraction |
+| Redirect | method | `@Redirect(url, status)` | same | args | string value extraction |
+| SetMetadata | both | `@SetMetadata(key, value)` | same | args | key/value extraction |
+| Module wiring | `ts.ClassDeclaration` with `@Module` | `@Module({...})` | `DecoratorArguments.get`, `ExpressionInspector`, `TypeResolver` | — | full object extraction (controllers / providers / imports / exports) |
+
+### E0.4 — Expression-resolution requirements
+
+For each NestJS decorator argument form:
+
+| Source | How represented |
+|---|---|
+| `@Controller("users")` | string literal "users" |
+| `@Controller()` | zero args (path = "") |
+| `@Get(":id")` | string literal ":id" |
+| `@Get()` | zero args (path = "") |
+| `@HttpCode(HttpStatus.CREATED)` | property-access `HttpStatus.CREATED` — preserve as `property-access` (object = HttpStatus, property = CREATED). Never coerce to numeric 201. |
+| `@UseGuards(JwtAuthGuard)` | identifier `JwtAuthGuard` — preserve as `identifier`. `SymbolResolver` + `DeclarationResolver` give the import / class declaration. NEVER invoke the guard. |
+| `@UseGuards(AuthGuard("jwt"))` | call `AuthGuard("jwt")` — preserve as `call` with its `argumentCount` and `arguments`. NEVER invoke. |
+| `@UseGuards([AuthGuard, AdminGuard])` | array literal — preserve as `array` with `itemCount`. Items are `identifier` references. NEVER invoke. |
+| `@SetMetadata("roles", ["admin", "user"])` | two args: string literal "roles", array literal ["admin","user"]. Preserve both as literals. |
+| `@UseGuards({ provide: AUTH, useClass: JwtAuthGuard })` | object literal — preserve as `object` with property keys + values. NEVER invoke. |
+
+### E0.5 — Route composition requirements
+
+| Source | Normalized path | Source-path preserved? |
+|---|---|---|
+| `@Controller("users")` + `@Get()` | `/users` | yes (`controllerPath: "users"`, `routePath: ""`) |
+| `@Controller("users")` + `@Get(":id")` | `/users/:id` | yes (`controllerPath: "users"`, `routePath: ":id"`) |
+| `@Controller()` + `@Get("health")` | `/health` | yes |
+| `@Controller("api/users")` + `@Get("profile/:id")` | `/api/users/profile/:id` | yes |
+| `@Controller("users/")` + `@Get("/profile")` | `/users/profile` (deduplicate slashes) | yes |
+| `@Controller("")` + `@Get("")` | `/` | yes |
+
+**Rules:**
+- Empty controller path + empty route path → `/`
+- Empty controller path + non-empty route path → `/<route>`
+- Non-empty controller path + empty route path → `/<controller>`
+- Strip leading/trailing slashes from each segment before joining
+- Collapse duplicate slashes
+- Preserve both **source path** (controller + route raw) and **normalized path**
+
+### E0.6 — Parameter requirements
+
+| Source | name | source | key |
+|---|---|---|---|
+| `@Param("id") id: string` | id | param | id |
+| `@Query("category") category?: string` | category | query | category |
+| `@Body() dto: CreateUserDto` | dto | body | undefined or "" (decision deferred) |
+| `@Param()` (no arg) | id | param | id |
+| `@Query()` (no arg) | q | query | q |
+| `@Headers("x-trace") x?: string` | x | headers | x-trace |
+
+**Decisions deferred to E3 / E4:**
+- `@Body()` key semantics — keep undefined or use ""
+- `@Param()` default key — equals parameter name
+
+### E0.7 — Type-resolution requirements
+
+`TypeResolver.resolve(node)` returns `ts.Type`. From the type:
+
+| Case | ts.Type | Normalized (deferred) |
+|---|---|---|
+| `string` | `TypeFlags.String` | `"string"` |
+| `number` | `TypeFlags.Number` | `"number"` |
+| `boolean` | `TypeFlags.Boolean` | `"boolean"` |
+| `CreateUserDto` | `TypeFlags.Object` + `symbol` | object reference |
+| `CreateUserDto[]` | `TypeFlags.Object` + `TypeFlags.Array` | array of object |
+| `User \| null` | `TypeFlags.Union` | union with `null` |
+| `Promise<...>` | generic / type-argument | promise wrapper (deferred) |
+
+**Reuse:** `SymbolResolver` + `DeclarationResolver` already exist. No new type system.
+
+### E0.8 — Guards / Pipes / Interceptors
+
+| Source | Classification | Resolution |
+|---|---|---|
+| `@UseGuards(JwtAuthGuard)` | identifier → class | `DeclarationResolver.resolveClass` |
+| `@UseGuards(AuthGuard("jwt"))` | call → invocation site | structurally preserved; **never invoked** |
+| `@UseGuards([AuthGuard, AdminGuard])` | array of identifiers / calls | each item resolved separately |
+
+**Invariant:** the analyzer NEVER invokes any guard, pipe, interceptor, factory, or constructor. They are surfaced as `ExpressionInspector`-classified AST nodes.
+
+### E0.9 — Module relationship
+
+`@Module({ controllers: [UsersController], providers: [UsersService], imports: [], exports: [] })` exists in example-api. The future normalized model should support:
+
+```text
+Module
+├── imports: ModuleReference[]
+├── controllers: ControllerReference[]
+├── providers: ProviderReference[]
+└── exports: ModuleReference[]
+```
+
+Resolution: each controller / provider identifier can be resolved via `SymbolResolver` + `DeclarationResolver` to its actual declaration. **Do not implement module extraction yet** — architecture decision only.
+
+### E0.10 — Package-boundary decision
+
+| Concern | Package |
+|---|---|
+| Decorator / class / method / parameter / call / expression discovery | `provider-ast` |
+| Symbol / type / declaration resolution | `provider-ast` |
+| NestJS decorator name recognition (e.g. `Get`, `Post`, `UseGuards`) | `provider-nestjs` |
+| Path composition, route metadata, HTTP method normalization, status code extraction | `provider-nestjs` |
+| Module wiring, controller→module→provider resolution | `provider-nestjs` |
+| Parameter source classification (`@Param` → `param`, `@Body` → `body`, …) | `provider-nestjs` |
+| NestJS-specific normalization (e.g. `HttpStatus.CREATED` enum reference) | `provider-nestjs` |
+| Document / OpenAPI / JSON-Schema model | future document package |
+
+**Hard rule:** NestJS decorator names and semantics NEVER leak into `provider-ast`. `provider-ast` only knows generic AST / expression kinds.
+
+### E0.11 — Proposed E1+ implementation sequence
+
+| Step | Title | Scope |
+|---|---|---|
+| E1 | Controller semantic extraction | name + classNode + `@Controller(path)` extraction; preserve source path; produce normalized path placeholder |
+| E2 | Route semantic extraction | method name + HTTP-verb normalization (use `HttpMethod` enum) + raw path extraction; preserve source path |
+| E3 | Route path composition | combine controller + route paths; handle slashes; preserve source paths |
+| E4 | Parameter semantic extraction | scan each method's parameters; classify each parameter decorator by name; extract key argument |
+| E5 | Type extraction | use `TypeResolver`; surface parameter type as text + symbol + kind |
+| E6 | Guards | scan `@UseGuards` on both class and method; preserve expressions + resolve identifiers |
+| E7 | Pipes / Interceptors / Filters | same pattern as E6 for the other three decorator families |
+| E8 | HTTP metadata | `@HttpCode` value extraction; `@Header` / `@Redirect` / `@Render` if present |
+| E9 | Module relationship | scan `@Module`; build module → controller / provider wiring |
+| E10 | Normalized NestJS semantic model | unify all extracted pieces into a single immutable semantic representation ready for the future document layer |
+
+Each E-step is its own commit. Each is test-only until structural pieces are stable, then commits once verification passes.
+
+### E0.12 — Known gaps (explicitly deferred, not silent)
+
+- `ParameterQuery` over-reach into nested lambda parameters (D0 finding) — to be addressed when E4 is implemented.
+- NestJS decorators not present in example-api (e.g. `@Header`, `@Redirect`, `@UseInterceptors`) will be exercised via synthetic fixtures in their respective E-step, **not** by modifying production controllers.
+- HTTP method enum normalization — currently the existing `RouteAnalyzer` uses raw uppercase strings; E2 will switch to the `HttpMethod` enum from `@spectra/core`.
+- Path composition algorithm — design finalised in E3, not E0.
+- Body key semantics (`@Body()` with no argument) — decision deferred to E4.
+
+### E0.13 — Verification checklist
+
+- [ ] No production code changed in E0 itself (audit only)
+- [ ] All D0-D30 regression tests still pass
+- [ ] Both packages typecheck with `tsc 5.9.3`
+- [ ] `expression.test.ts` regression intact (a-x)
+- [ ] No new public API added
+- [ ] `ExpressionInterpreter` (provider-nestjs) explicitly marked as legacy / not for new code
+- [ ] No decorator / guard / factory / constructor invocation anywhere
+- [ ] Master doc updated with this E0 section
+
+**Status:** all items satisfied.
+
+---
+
+End of E0 audit.
