@@ -1,14 +1,35 @@
-import { MethodQuery } from "@spectra/provider-ast";
+import { ExpressionInspector, MethodQuery } from "@spectra/provider-ast";
 
 import { ControllerMetadata, RouteMetadata } from "../metadata";
-import { DecoratorReader } from "../utils";
+import { composeRoutePath } from "../semantic/route-composition";
+import { RouteMethodExtractor } from "../semantic/route-method";
+import { RoutePathExtractor } from "../semantic/route-path";
+import {
+    DecoratorArguments,
+    DecoratorReader,
+} from "../utils";
 
 export class RouteAnalyzer {
 
+    private readonly methodExtractor: RouteMethodExtractor;
+
     public constructor(
         private readonly methodQuery: MethodQuery,
-        private readonly decoratorReader: DecoratorReader,
-    ) { }
+        decoratorReader: DecoratorReader,
+        decoratorArguments?: DecoratorArguments,
+        inspector?: ExpressionInspector,
+        methodExtractor?: RouteMethodExtractor,
+    ) {
+        this.methodExtractor =
+            methodExtractor ??
+            new RouteMethodExtractor(
+                decoratorReader,
+                new RoutePathExtractor(
+                    decoratorArguments ?? new DecoratorArguments(),
+                    inspector ?? new ExpressionInspector(),
+                ),
+            );
+    }
 
     public analyze(
         controller: ControllerMetadata,
@@ -23,57 +44,51 @@ export class RouteAnalyzer {
 
         for (const methodNode of methods) {
 
-            const httpMethod =
-                this.getHttpMethod(methodNode);
-
-            if (!httpMethod) {
+            const views = this.methodExtractor.extract(methodNode);
+            if (views.length === 0) {
                 continue;
             }
 
-            routes.push({
+            for (const view of views) {
 
-                name:
-                    methodNode.name.getText(),
+                const composedPath = composeRoutePath(
+                    controller.normalizedPath,
+                    view.normalizedPath,
+                );
 
-                path: "",
+                routes.push({
 
-                method: httpMethod,
+                    name: methodNode.name.getText(),
 
-                methodNode,
+                    decoratorName: view.decoratorName,
 
-            });
+                    decoratorIndex: view.decoratorIndex,
+
+                    method: view.httpMethod,
+
+                    sourcePath: view.sourcePath,
+
+                    path: view.normalizedPath,
+
+                    normalizedPath: view.normalizedPath,
+
+                    routePathValue: view.value,
+
+                    routeExpressionKind: view.expressionKind,
+
+                    isStatic: view.isStatic,
+
+                    composedPath,
+
+                    methodNode,
+
+                });
+
+            }
 
         }
 
         return routes;
-
-    }
-
-    private getHttpMethod(
-        methodNode: import("typescript").MethodDeclaration,
-    ) {
-
-        if (this.decoratorReader.has(methodNode, "Get")) {
-            return "GET";
-        }
-
-        if (this.decoratorReader.has(methodNode, "Post")) {
-            return "POST";
-        }
-
-        if (this.decoratorReader.has(methodNode, "Put")) {
-            return "PUT";
-        }
-
-        if (this.decoratorReader.has(methodNode, "Patch")) {
-            return "PATCH";
-        }
-
-        if (this.decoratorReader.has(methodNode, "Delete")) {
-            return "DELETE";
-        }
-
-        return undefined;
 
     }
 

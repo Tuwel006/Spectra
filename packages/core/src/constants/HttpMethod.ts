@@ -6,6 +6,7 @@ export const HttpMethod = {
   DELETE: "DELETE",
   OPTIONS: "OPTIONS",
   HEAD: "HEAD",
+  ALL: "ALL",
   TRACE: "TRACE",
   CONNECT: "CONNECT",
 } as const;

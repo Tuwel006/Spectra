@@ -4743,3 +4743,253 @@ Summary: 9/9 normalization cases match
 ---
 
 End of E1.
+
+---
+
+## Step E2 — Route semantic extraction
+
+Status: [x]
+
+Files:
+- `packages/core/src/constants/HttpMethod.ts` *(modified — added `ALL` to enum)*
+- `packages/provider-nestjs/src/semantic/route-path.ts` *(new)*
+- `packages/provider-nestjs/src/semantic/route-method.ts` *(new)*
+- `packages/provider-nestjs/src/semantic/route-composition.ts` *(new)*
+- `packages/provider-nestjs/src/semantic/index.ts` *(barrel updated)*
+- `packages/provider-nestjs/src/metadata/RouteMetadata.ts` *(extended)*
+- `packages/provider-nestjs/src/analyzer/RouteAnalyzer.ts` *(rewritten with backward-compat constructor)*
+- `packages/provider-nestjs/test/route-semantic.test.ts` *(new)*
+- `package.json` *(+1 line: `test:nest:route-semantic`)*
+
+### Objective
+Per E0.11: extract per-method HTTP verb + route path argument into the
+`RouteMetadata` model, normalizing the verb to the `HttpMethod` enum
+and producing both source-preserved and normalized route components.
+Compose with E1 controller metadata to produce the final route path.
+
+### Existing implementation found
+- `RouteAnalyzer.analyze()` discovered Get / Post / Put / Patch / Delete
+  decorators and returned `name`, `method` (string literal, NOT yet
+  using `HttpMethod` enum), and `path: ""` (empty, incomplete).
+- `RouteMetadata` exposed only `name`, `path`, `method`, `methodNode`.
+- `DecoratorReader` + `DecoratorArguments` + `ExpressionInspector` were
+  already available.
+- `HttpMethod` enum existed in `@spectra/core` but lacked `ALL`.
+
+### Architecture inspected
+- `packages/provider-nestjs/src/analyzer/RouteAnalyzer.ts`
+- `packages/provider-nestjs/src/metadata/RouteMetadata.ts`
+- `packages/core/src/constants/HttpMethod.ts`
+- All E1 + D-step components (no duplication introduced)
+
+### Existing implementation deficiency
+1. `path: ""` was empty (D0 finding for both controller and route paths).
+2. HTTP method used raw uppercase strings rather than `HttpMethod` enum
+   (the field type was already `HttpMethod`, but the value was a literal
+   string typed via `as const` — fragile and inconsistent).
+3. Only 5 of 8 NestJS HTTP verbs recognized (missing Options, Head, All).
+4. No source-path preservation.
+5. No expression kind classification for the route argument.
+6. No static / dynamic indication.
+7. No decorator index / order preservation.
+8. No composition with controller path.
+
+### Files changed (production)
+- `packages/core/src/constants/HttpMethod.ts` — added `ALL: "ALL"` entry
+  (small generic enhancement for NestJS `@All()`). All other entries
+  preserved.
+- `packages/provider-nestjs/src/semantic/route-path.ts` — new `RoutePathExtractor`
+  + `RoutePathView` interface + `normalizeRoutePath` helper. Reuses
+  `DecoratorArguments` + `ExpressionInspector`.
+- `packages/provider-nestjs/src/semantic/route-method.ts` — new
+  `RouteMethodExtractor` + `RouteDecoratorView` interface + `HTTP_VERBS`
+  table covering all 8 NestJS HTTP verbs (Get / Post / Put / Patch /
+  Delete / Options / Head / All). Never invokes or evaluates.
+- `packages/provider-nestjs/src/semantic/route-composition.ts` — new
+  `composeRoutePath(controllerPath, methodPath)` helper implementing
+  the documented slash-handling rules.
+- `packages/provider-nestjs/src/semantic/index.ts` — barrel exports the
+  three new semantic modules.
+- `packages/provider-nestjs/src/metadata/RouteMetadata.ts` — extended
+  with `decoratorName`, `decoratorIndex`, `sourcePath`, `normalizedPath`,
+  `routePathValue`, `routeExpressionKind`, `isStatic`, `composedPath`.
+  The existing `path` field is preserved as a backward-compatible alias
+  for `normalizedPath`.
+- `packages/provider-nestjs/src/analyzer/RouteAnalyzer.ts` — rewritten
+  to use `RouteMethodExtractor` + `composeRoutePath`; constructor
+  extended with optional `DecoratorArguments` / `ExpressionInspector` /
+  `RouteMethodExtractor` (defaults preserve the existing two-arg call
+  site in `controller.test.ts`).
+
+### Implementation reasoning
+- The three extractors are split by concern (path / method / composition)
+  so each can be tested and replaced independently later.
+- HTTP verb recognition is a small table (`HTTP_VERBS`) — adding a new
+  verb is one line. Order in the table is irrelevant because the
+  extractor iterates ALL decorators and preserves `decoratorIndex`.
+- Multiple HTTP decorators on the same method produce multiple
+  `RouteMetadata` entries; they are NEVER merged. This preserves the
+  unusual but valid NestJS pattern `@Get("a") @Post("b")`.
+- Composition rules are explicit and string-level — no regex, no AST
+  mutation. Each input segment is stripped of leading/trailing slashes,
+  empty segments are dropped, then re-joined with `/`. The root path
+  (`"" + ""`) becomes `/`.
+- All NestJS-specific knowledge lives in `provider-nestjs`. `provider-ast`
+  was not touched (except `@spectra/core`'s `ALL` enum value, which is
+  framework-independent).
+- The legacy `ExpressionInterpreter` was NOT used; `ExpressionInspector`
+  is the sole expression classifier.
+- No decorator / guard / factory / constructor invocation.
+
+### Exact command
+```bash
+pnpm test:nest:route-semantic
+# or directly:
+tsx packages/provider-nestjs/test/route-semantic.test.ts
+```
+
+### MATCH OUTPUT
+
+```
+===== E2 — ROUTE SEMANTIC EXTRACTION =====
+
+--- Part A: normalizeRoutePath rules ---
+  "" -> ""                        PASS
+  "/" -> ""                       PASS
+  "users" -> "users"              PASS
+  "/users" -> "users"             PASS
+  "users/" -> "users"             PASS
+  "/users/" -> "users"            PASS
+  "a//b" -> "a/b"                 PASS
+  "api/v1" -> "api/v1"            PASS
+  "/api/v1/users/:id" -> "api/v1/users/:id" PASS
+  Summary: 9/9
+
+--- Part B: composeRoutePath rules ---
+  ("", "") -> "/"                                 PASS
+  ("users", "") -> "/users"                       PASS
+  ("", "users") -> "/users"                       PASS
+  ("users", ":id") -> "/users/:id"                PASS
+  ("/users/", "/profile/") -> "/users/profile"    PASS
+  ("api/v1", "users/:id") -> "/api/v1/users/:id"  PASS
+  ("", "") -> "/"                                 PASS
+  Summary: 7/7
+
+--- Part C: synthetic route extraction ---
+  m1[0] Get@0 method=GET sourcePath=undefined kind=<zero-args> value=undefined normalized="" static=true PASS
+  m2[0] Get@0 method=GET sourcePath="" kind=string value="" normalized="" static=true PASS
+  m3[0] Get@0 method=GET sourcePath="/" kind=string value="/" normalized="" static=true PASS
+  m4[0] Get@0 method=GET sourcePath="users" kind=string value="users" normalized="users" static=true PASS
+  m5[0] Get@0 method=GET sourcePath="/users/" kind=string value="/users/" normalized="users" static=true PASS
+  m6[0] Get@0 method=GET sourcePath="users/:id" kind=string value="users/:id" normalized="users/:id" static=true PASS
+  m7[0] Post@0 method=POST sourcePath=undefined kind=<zero-args> value=undefined normalized="" static=true PASS
+  m8[0] Put@0 method=PUT sourcePath=undefined kind=<zero-args> value=undefined normalized="" static=true PASS
+  m9[0] Patch@0 method=PATCH sourcePath=undefined kind=<zero-args> value=undefined normalized="" static=true PASS
+  m10[0] Delete@0 method=DELETE sourcePath=undefined kind=<zero-args> value=undefined normalized="" static=true PASS
+  m11[0] Options@0 method=OPTIONS sourcePath=undefined kind=<zero-args> value=undefined normalized="" static=true PASS
+  m12[0] Head@0 method=HEAD sourcePath=undefined kind=<zero-args> value=undefined normalized="" static=true PASS
+  m13[0] All@0 method=ALL sourcePath=undefined kind=<zero-args> value=undefined normalized="" static=true PASS
+  m14Multi[0] Get@0 method=GET sourcePath="a" kind=string value="a" normalized="a" static=true PASS
+  m14Multi[1] Post@1 method=POST sourcePath="b" kind=string value="b" normalized="b" static=true PASS
+  m15Id[0] Get@0 method=GET sourcePath="routeVariable" kind=identifier value=undefined normalized="" static=false PASS
+  m16Prop[0] Get@0 method=GET sourcePath="HttpStatus.CREATED" kind=property-access value=undefined normalized="" static=false PASS
+  m17Call[0] Get@0 method=GET sourcePath="factory()" kind=call value=undefined normalized="" static=false PASS
+  m18Template[0] Get@0 method=GET sourcePath="`template`" kind=template value=undefined normalized="" static=false PASS
+  m19HttpCode     no HTTP verb -> 0 routes PASS
+  Summary: 20/20
+
+--- Part D: example-api integration ---
+  AppController.getHello decorator=Get method=GET sourcePath=undefined kind=<zero-args> composed="/" static=true PASS
+  CartController.getCart decorator=Get method=GET sourcePath=undefined kind=<zero-args> composed="/cart" static=true PASS
+  CartController.addItem decorator=Post method=POST sourcePath="'items'" kind=string composed="/cart/items" static=true PASS
+  CartController.removeItem decorator=Delete method=DELETE sourcePath="'items/:productId'" kind=string composed="/cart/items/:productId" static=true PASS
+  OrdersController.findAll decorator=Get method=GET sourcePath=undefined kind=<zero-args> composed="/orders" static=true PASS
+  OrdersController.findOne decorator=Get method=GET sourcePath="':id'" kind=string composed="/orders/:id" static=true PASS
+  OrdersController.create decorator=Post method=POST sourcePath=undefined kind=<zero-args> composed="/orders" static=true PASS
+  ProductsController.findAll decorator=Get method=GET sourcePath=undefined kind=<zero-args> composed="/products" static=true PASS
+  ProductsController.findOne decorator=Get method=GET sourcePath="':id'" kind=string composed="/products/:id" static=true PASS
+  ProductsController.create decorator=Post method=POST sourcePath=undefined kind=<zero-args> composed="/products" static=true PASS
+  ProductsController.update decorator=Put method=PUT sourcePath="':id'" kind=string composed="/products/:id" static=true PASS
+  ProductsController.remove decorator=Delete method=DELETE sourcePath="':id'" kind=string composed="/products/:id" static=true PASS
+  UsersController.register decorator=Post method=POST sourcePath="'register/test'" kind=string composed="/users/register/test" static=true PASS
+  UsersController.login decorator=Post method=POST sourcePath="'login'" kind=string composed="/users/login" static=true PASS
+  UsersController.getProfile decorator=Get method=GET sourcePath="'profile/:id'" kind=string composed="/users/profile/:id" static=true PASS
+  AuthController.login decorator=Post method=POST sourcePath="\"login\"" kind=string composed="/auth/login" static=true PASS
+  AuthController.me decorator=Get method=GET sourcePath="\"me\"" kind=string composed="/auth/me" static=true PASS
+  RootController.root decorator=Get method=GET sourcePath="\"root\"" kind=string composed="/root" static=true PASS
+  Summary: 18/18
+```
+
+### Verification matrix
+
+| Case | Expected | Actual | Status |
+|---|---|---|---|
+| `@Get()` (zero args) | `method=GET, sourcePath=undefined, kind=<zero-args>, normalized="", static=true` | matches | **PASS** |
+| `@Get("")` | `method=GET, sourcePath="\"\"", kind=string, value="", normalized=""` | matches | **PASS** |
+| `@Get("/")` | `method=GET, sourcePath="\"\/\"", value="/", normalized=""` | matches | **PASS** |
+| `@Get("users")` | `method=GET, value="users", normalized="users"` | matches | **PASS** |
+| `@Get("/users/")` | `method=GET, value="/users/", normalized="users"` (slash stripped) | matches | **PASS** |
+| `@Get("users/:id")` | parameterized preserved | matches | **PASS** |
+| `@Post()` / `@Put()` / `@Patch()` / `@Delete()` / `@Options()` / `@Head()` / `@All()` | each verb normalized to enum | all 7 match | **PASS** |
+| `@Get("a") @Post("b")` (multi-verb) | 2 routes with decoratorIndex 0/1, both methods | matches | **PASS** |
+| `@Get(routeVariable)` (identifier) | `kind=identifier, isStatic=false, no value` | matches | **PASS** |
+| `@Get(HttpStatus.CREATED)` (property-access) | `kind=property-access, isStatic=false` | matches | **PASS** |
+| `@Get(factory())` (call) | `kind=call, isStatic=false`, NOT executed | matches | **PASS** |
+| ``` `@Get(`template`) ``` (template) | `kind=template, isStatic=false` | matches | **PASS** |
+| `@HttpCode(201)` (non-HTTP-verb) | 0 routes extracted | matches | **PASS** |
+| **Composition: `@Controller("users")` + `@Get()`** | `/users` | matches | **PASS** |
+| **Composition: `@Controller("users")` + `@Get(":id")`** | `/users/:id` | matches | **PASS** |
+| **Composition: `@Controller("/users/")` + `@Get("/profile/")`** | `/users/profile` | matches | **PASS** |
+| **Composition: `@Controller()` + `@Get()`** | `/` | matches | **PASS** |
+| **Composition: `@Controller("api/v1")` + `@Get("users/:id")`** | `/api/v1/users/:id` | matches | **PASS** |
+| **example-api integration: 18 real routes** | all 18 match expected semantic view | 18/18 | **PASS** |
+
+### Regression result: **PASS**
+- `controller.test.ts` (existing baseline) — exit 0 from repo root
+  (controller paths populated).
+- `controller-semantic.test.ts` (E1) — exit 0.
+- All 20 D-step tests rerun with existing verification baselines —
+  all PASS.
+- `expression.test.ts` a-x intact.
+- `symbol.test.ts`, `declaration.test.ts` — exit 0.
+- Typecheck `provider-ast`: exit 0.
+- Typecheck `provider-nestjs`: exit 0.
+
+### Architectural notes
+- **Reuse discipline:** No new `TypeChecker` / `SymbolResolver` /
+  `DeclarationResolver`. `RoutePathExtractor` + `RouteMethodExtractor`
+  compose the existing `DecoratorArguments` + `ExpressionInspector`
+  primitives.
+- **Hard boundary:** `provider-ast` was not touched. All NestJS-specific
+  knowledge (verb list, path normalization, composition rules) lives
+  in `provider-nestjs`.
+- **No invocation:** the analyzer NEVER invokes any route handler,
+  factory, or dynamic expression. Non-string-literal arguments keep
+  their AST source text + expression kind; `isStatic=false`.
+- **Source preservation:** `sourcePath` keeps the raw argument text;
+  `normalizedPath` keeps the normalized component; `composedPath` is
+  computed from E1 controller + this route. All three are preserved
+  independently.
+- **HTTP method normalization:** `HttpMethod` enum is the canonical
+  type. The new `ALL` value supports NestJS `@All()` (catch-all).
+  Existing `TRACE` / `CONNECT` entries preserved for completeness even
+  though NestJS doesn't use them.
+
+### Known gaps (not in E2 scope; deferred)
+- Parameter source / key extraction — E4.
+- Type extraction — E5.
+- Guards / pipes / interceptors — E6, E7.
+- HTTP metadata (`@HttpCode`, `@Header`, `@Redirect`) — E8.
+- Module wiring — E9.
+- Unified semantic model — E10.
+- ControllerAnalyzer does not yet wire `routes` into each
+  `ControllerMetadata` (it leaves `routes: []`). A follow-up step
+  (E10) will populate the cross-reference; current callers
+  independently run `RouteAnalyzer.analyze(controller)`.
+
+### Commit
+- `feat(provider-nestjs): extract route semantics`
+
+---
+
+End of E2.
