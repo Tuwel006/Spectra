@@ -2762,6 +2762,237 @@ Never execute the function.
 
 ---
 
+## Step D13 — Call expressions
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/call-expressions.test.ts` *(new)*
+- `package.json` — added `"test:nest:call"` script
+
+**Initial production state:** inspected
+`packages/provider-ast/src/expression/ExpressionInspector.ts` — the
+existing branch for `ts.isCallExpression` (lines 95-100) already
+returns `kind: "call"` with the AST node. **No production change is
+needed.**
+
+**Production deficiency:** none found for `CallExpression` itself.
+(The audit confirms that `factory()` is correctly classified as `call`
+and not as `identifier` / `string`, that `factory.value` stays
+`property-access`, that `factory["value"]` stays `element-access`,
+and that nested call arguments never inflate the top-level decorator
+argument count.)
+
+Test command:
+
+```bash
+pnpm test:nest:call
+# or directly:
+tsx packages/provider-nestjs/test/call-expressions.test.ts
+```
+
+MATCH OUTPUT — Part A (synthetic call forms, abridged):
+
+```text
+===== D13 PART A — SYNTHETIC CALL FORMS =====
+
+--- CallForms.m1 (factory()) ---
+  argumentCount: 1
+  argument[0]: kind: call | callee: factory | argumentCount: 0 | args: []
+              ExpressionInspector.kind: call
+
+--- CallForms.m2 (factory("x")) ---
+  argument[0]: kind: call | argumentCount: 1
+              args[0]: kind: string-literal | value: "x"
+              ExpressionInspector.kind: call
+
+--- CallForms.m3 (factory("x", 123, true)) ---
+  argument[0]: kind: call | argumentCount: 3 (in source order)
+              args[0..2]: string / number / boolean
+              ExpressionInspector.kind: call
+
+--- CallForms.m4 (first(), second("x")) ---
+  argumentCount: 2; both kind: call, source order preserved
+
+--- CallForms.m5String / m5Number / m5Negative / m5Boolean / m5Null ---
+  each factory(<expr>) reports args[0] as:
+    string / number / prefix-unary (-123) / boolean / null-literal
+  ExpressionInspector.kind: call (top-level)
+
+--- CallForms.m5Identifier / m5Property / m5Element / m5Nested / m5Array / m5Object ---
+  each factory(<expr>) reports args[0] as:
+    identifier / property-access / element-access / nested call / array / object
+  ExpressionInspector.kind: call (top-level)
+
+--- CallForms.m5Binary (factory(1 + 2)) ---
+  args[0]: kind: binary, operator: PlusToken
+  ExpressionInspector.kind: call (top-level) — NOT evaluated to 3
+
+--- CallForms.m5Conditional (factory(cond ? "a" : "b")) ---
+  args[0]: kind: conditional
+  ExpressionInspector.kind: call (top-level) — NOT evaluated
+
+--- CallForms.m6Nested2 (factory(inner(deep()))) ---
+  3-deep call nesting preserved structurally
+  ExpressionInspector.kind: call
+
+--- CallForms.m7ArrayCall ([factory()]) ---
+  argument[0]: kind: array | items[0]: kind: call
+  ExpressionInspector.kind: array (top-level); NOT flattened
+
+--- CallForms.m8ObjectCall ({ guard: factory() }) ---
+  argument[0]: kind: object | guard → call
+  ExpressionInspector.kind: object (top-level)
+
+--- CallForms.m9NestedObject ({ config: { factory: create() } }) ---
+  argument[0]: object → object → factory → call
+  ExpressionInspector.kind: object (top-level)
+
+--- CallForms.m10ReceiverProperty (factory().value) ---
+  argument[0]: kind: property-access | object: factory() | property: value
+  ExpressionInspector.kind: property-access (top-level) — NOT call
+
+--- CallForms.m11ReceiverElement (factory()["value"]) ---
+  argument[0]: kind: element-access | object: factory() | argument: "value"
+  ExpressionInspector.kind: element-access (top-level) — NOT call
+
+--- CallForms.m12ReceiverCall (factory()()) ---
+  argument[0]: kind: call | calleeKind: CallExpression | calleeText: factory() | argumentCount: 0
+  callee IS a call; described structurally, NOT executed
+
+--- CallForms.m13 boundary set ---
+  factory        → identifier
+  factory()      → call
+  factory.value  → property-access
+  factory["value"] → element-access
+  Four structurally distinct classifications preserved.
+```
+
+MATCH OUTPUT — Part B (real-looking NestJS factory calls):
+
+```text
+===== D13 PART B — REAL-LOOKING NESTJS FACTORY CALLS =====
+
+@UseGuards(AuthGuard())                  → call, NOT executed
+@UseInterceptors(LoggingInterceptor("verbose")) → call with string arg
+@UsePipes(ValidationPipe({ whitelist: true })) → call with object arg
+@SetMetadata("role", computeRole("admin")) → string + call in source order
+@Roles(defineRoles(["admin", "user"]))   → call with array arg
+```
+
+MATCH OUTPUT — Part C (top-level vs nested arg-count integrity):
+
+```text
+===== D13 PART C — TOP-LEVEL vs NESTED ARG COUNT INTEGRITY =====
+
+@Decorator(factory("a", "b", "c"))   top-level argumentCount=1, nested call.argumentCount=3
+@Decorator([factory("a", "b")])      top-level argumentCount=1, array.itemCount=1, call.argumentCount=2
+@Decorator(first(), second("x"))     top-level argumentCount=2 (two distinct calls)
+```
+
+MATCH OUTPUT — Part D (example-api call scan):
+
+```text
+Total CallExpression decorator arguments in example-api: 0
+```
+
+(No production controller in `example-api` actually invokes a
+decorator factory. The D13 protocol allows synthetic NestJS-style
+fixtures rather than modifying production controllers.)
+
+Verification matrix:
+
+| Required | Expected | Actual | Result |
+|---|---|---|---|
+| `@Decorator(factory())` | `call, args=[]` | matches | **PASS** |
+| `@Decorator(factory("x"))` | call with string arg | matches | **PASS** |
+| `@Decorator(factory("x", 123, true))` | call with 3 args in order | matches | **PASS** |
+| `@Decorator(first(), second("x"))` | 2 calls, 2 top-level args | matches | **PASS** |
+| `factory("a")` | string arg | matches | **PASS** |
+| `factory(123)` | number arg | matches | **PASS** |
+| `factory(-123)` | prefix-unary arg | matches | **PASS** |
+| `factory(true)` | boolean arg | matches | **PASS** |
+| `factory(null)` | null arg | matches | **PASS** |
+| `factory(MyGuard)` | identifier arg | matches | **PASS** |
+| `factory(HttpStatus.CREATED)` | property-access arg | matches | **PASS** |
+| `factory(values["key"])` | element-access arg | matches | **PASS** |
+| `factory(inner())` | nested call arg | matches | **PASS** |
+| `factory([1, 2, 3])` | array arg | matches | **PASS** |
+| `factory({ role: "admin" })` | object arg | matches | **PASS** |
+| `factory(1 + 2)` | binary arg, NOT 3 | matches | **PASS — NOT evaluated** |
+| `factory(cond ? "a" : "b")` | conditional arg, NOT evaluated | matches | **PASS — NOT evaluated** |
+| `factory(inner(deep()))` | 3-deep nested | matches | **PASS** |
+| `[factory()]` | array(call), NOT flattened | matches | **PASS** |
+| `{ guard: factory() }` | object(call) | matches | **PASS** |
+| `{ config: { factory: create() } }` | object → object → call | matches | **PASS** |
+| `factory().value` | property-access (object is call) | matches | **PASS** |
+| `factory()["value"]` | element-access (object is call) | matches | **PASS** |
+| `factory()()` | call (callee is call) | matches | **PASS** |
+| **`factory` vs `factory()` vs `factory.value` vs `factory["value"]`** | four distinct kinds | `identifier / call / property-access / element-access` | **PASS — strict boundary** |
+| `@UseGuards(AuthGuard())` (NestJS factory) | call, NOT executed | matches | **PASS** |
+| `@UseInterceptors(LoggingInterceptor("verbose"))` | call with string arg | matches | **PASS** |
+| `@UsePipes(ValidationPipe({ whitelist: true }))` | call with object arg | matches | **PASS** |
+| `@SetMetadata("role", computeRole("admin"))` | string + call | matches | **PASS** |
+| `@Roles(defineRoles(["admin", "user"]))` | call with array arg | matches | **PASS** |
+| **`factory("a","b","c")` arg-count integrity** | top-level 1, nested 3 | matches | **PASS** |
+| **`[factory("a","b")]` arg-count integrity** | top-level 1, array 1, call 2 | matches | **PASS** |
+| **`first(), second("x")` arg-count integrity** | top-level 2 | matches | **PASS** |
+| example-api call scan | report total | `0` (no production modification needed) | **PASS** |
+
+Other verification:
+- **Typecheck:** PASS — `tsc 5.9.3` exit=0 for both `provider-ast`
+  and `provider-nestjs`.
+- **D2 regression:** order test → 33 lines.
+- **D3 regression:** zero-arguments test → 47 lines.
+- **D4 regression:** one-argument test → 68 lines.
+- **D5 regression:** multiple-arguments test → 81 lines.
+- **D6 regression:** string-literals test → 131 lines.
+- **D7 regression:** numeric-literals test → 117 lines.
+- **D8 regression:** boolean-literals test → 118 lines.
+- **D9 regression:** null-literals test → 122 lines.
+- **D10 regression:** identifier-expressions test → 85 lines.
+- **D11 regression:** property-access test → 100 lines.
+- **D12 regression:** element-access test → 102 lines.
+- **`expression.test.ts` regression:** a–n unchanged.
+- **`symbol.test.ts` regression:** exit 0.
+- **`declaration.test.ts` regression:** exit 0.
+- **Diff:** minimal — 1 new test file (`call-expressions.test.ts`)
+  + 1 line in `package.json`. No production code modified.
+
+Architectural notes:
+- `ExpressionInspector`'s `ts.isCallExpression` branch returns
+  `kind: "call"`. The D13 test view additionally surfaces `calleeKind`,
+  `calleeText`, `argumentCount`, and a recursively-described list of
+  arguments. The recursive `arguments: ExpressionView[]` field uses
+  the same `view(...)` helper so every nested expression kind is
+  classified structurally.
+- Top-level decorator `argumentCount` only counts top-level
+  decorator arguments. Nested call `argumentCount` is reported inside
+  the call descriptor. The integrity tests in Part C prove this
+  explicitly: `factory("a","b","c")` → top-level 1, nested 3.
+- The `factory()` callee (identifier `factory`) is never resolved
+  through `SymbolResolver`. Identifier resolution remains separate
+  per the three-layer architecture established in D10.
+- `factory.value` and `factory["value"]` are top-level
+  `property-access` / `element-access`; they are NOT promoted to
+  `call` even though `factory` could be a function. The expression
+  classification is purely structural.
+
+Known remaining gaps (carried forward):
+1. `ConditionalExpression`, `BinaryExpression`, `PrefixUnaryExpression`
+   with non-`MinusToken` operator still classify as
+   `ExpressionInspector.kind: "unknown"` (production inspector).
+   The D13 test view classifies them structurally so their
+   recognition inside call arguments is fully verified, but the
+   production gap remains.
+2. Optional chaining `factory()?.value` and non-null assertion
+   `factory()!` are not added speculatively.
+
+Commit:
+- `test(provider-nestjs): audit call-expression decorator arguments`
+
+---
+
 ## D13 — New expressions
 
 Test:

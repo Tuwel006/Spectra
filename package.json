@@ -29,6 +29,7 @@
     "test:nest:identifier": "tsx packages/provider-nestjs/test/identifier-expressions.test.ts",
     "test:nest:property": "tsx packages/provider-nestjs/test/property-access.test.ts",
     "test:nest:element": "tsx packages/provider-nestjs/test/element-access.test.ts",
+    "test:nest:call": "tsx packages/provider-nestjs/test/call-expressions.test.ts",
     "test:ast:expression": "tsx packages/provider-ast/test/expression.test.ts",
     "test:nest:symbol": "tsx packages/provider-nestjs/test/symbol.test.ts",
     "test:nest:declaration": "tsx packages/provider-nestjs/test/declaration.test.ts",
