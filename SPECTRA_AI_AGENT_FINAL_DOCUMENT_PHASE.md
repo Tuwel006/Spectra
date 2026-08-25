@@ -3728,6 +3728,40 @@ This is needed later for useful diagnostics.
 
 ---
 
+## Step D29 — Spread elements + special AST
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/test/spread-elements.test.ts` *(new)*
+- `package.json` — added `"test:nest:spread"` script
+
+**Initial production state:** SpreadElement nodes are preserved
+structurally by their parent container (ArrayLiteralExpression /
+CallExpression / ObjectLiteralExpression). The inspector classifies
+the parent as `array` / `call` / `object`; the test view detects
+individual SpreadElement children inside. `ThisExpression` and
+`SuperExpression` are not separately classified — they fall through
+to `unknown` for now.
+
+**MATCH OUTPUT — 5 spread elements preserved + 6 spread/shorthand
+decorators:**
+- `[...guards]` → array, items[0] = spread ...guards
+- `[a, ...rest, b]` → array, items: [identifier, spread ...rest, identifier]
+- `factory(...args)` → call, args[0] = spread ...args
+- `factory(...getArgs())` → call, args[0] = spread ...getArgs()
+- `{ ...options, key: value }` → object, [0] SpreadElement, [1] PropertyAssignment
+- `{ enabled }` → object, [0] ShorthandPropertyAssignment
+- `this` → unknown (ThisExpression not separately classified; structurally preserved)
+- `super.method` → property-access (correct: super.method IS a property-access expression)
+
+**No flattening** — all spread elements preserved as-is inside their
+parent container.
+
+**Commit:** `test(provider-nestjs): audit spread + special-ast decorator arguments`
+
+---
+
 ## D29 — Symbol resolution for identifier arguments
 
 For:
