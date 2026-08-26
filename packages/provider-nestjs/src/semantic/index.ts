@@ -8,3 +8,4 @@ export * from "./parameter-type";
 export * from "./decorator-arg";
 export * from "./guard-source";
 export * from "./http-metadata";
+export * from "./module-source";

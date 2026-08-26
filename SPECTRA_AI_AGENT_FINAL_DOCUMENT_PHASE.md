@@ -6365,3 +6365,266 @@ For `@HttpCode(status)` / `@Header(name, value)` / `@Redirect(url)`:
 ---
 
 End of E8.
+
+---
+
+## Step E9 — Module relationship semantic extraction
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/src/semantic/module-source.ts` *(new — `ModuleSourceExtractor` + `ModuleMetadata` + `ModuleItemView` + `ModuleImportEdge`)*
+- `packages/provider-nestjs/src/semantic/index.ts` *(barrel updated)*
+- `packages/provider-nestjs/test/module-semantic.test.ts` *(new)*
+- `package.json` *(+1 line: `test:nest:module`)*
+
+### Objective
+Per E0.11: extract `@Module({imports, controllers, providers,
+exports})` metadata structurally. Produce per-module records with
+each field's items as `ModuleItemView` records. Build parent →
+child module import edges for downstream consumers (E10).
+
+NEVER instantiate modules / providers / controllers. NEVER execute
+factories. NEVER resolve runtime dependency injection. Preserve
+source expressions for all forms: identifier, call, property-access,
+object, array, primitive.
+
+### Existing implementation found
+- There was no NestJS @Module extraction previously.
+- `SymbolResolver` + `DeclarationResolver` (provider-ast) already
+  exist and are reused (no new resolver classes).
+
+### Architecture inspected
+- `packages/provider-nestjs/src/utils/DecoratorReader.ts`
+- `packages/provider-nestjs/src/utils/DecoratorArguments.ts`
+- `packages/provider-nestjs/src/semantic/decorator-arg.ts` (the
+  generic primitive + property-access detection from E6/E7)
+- `apps/example-api/src/*.module.ts` (6 real modules)
+
+### Files changed (production)
+- **`module-source.ts`** *(new)*:
+  - `ModuleItemView` — single @Module argument entry:
+    `kindName`, `sourceText`, `isStatic`, `resolvedSymbolName`,
+    `resolvedDeclarationKind`, `className`, `providerForm`,
+    `children`. Reuses DecoratorReader + DecoratorArguments +
+    ExpressionInspector + SymbolResolver + DeclarationResolver.
+  - `ModuleMetadata` — `name`, `classNode`, `imports`,
+    `controllers`, `providers`, `exports`.
+  - `ModuleImportEdge` — `fromModuleName`, `toModuleName`
+    (from the imported item's `className` or
+    `resolvedSymbolName`), `item`.
+  - `ModuleSourceExtractor.extract(class)` — ALWAYS returns a
+    `ModuleMetadata` (even for classes without @Module —
+    empty arrays). This matches the rule that "no @Module decorator"
+    is still recorded (so downstream consumers see every class).
+  - `ModuleSourceExtractor.extractAll(sources, classQuery)` —
+    produces `modules` + `edges` (one edge per imports entry).
+  - For primitive literal arguments (`'name'`, `42`, `false`,
+    `null`), `kindName` reflects the literal type and `isStatic=true`.
+  - For object-literal provider forms
+    (`{ provide: TOKEN, useClass: UsersService }` etc.), the
+    `providerForm` field records the first property assignment's
+    key (e.g. `"provide"`) and children carry the key/value pairs.
+
+### Implementation reasoning
+- **Reuse discipline:** No new `TypeChecker` / `TypeResolver` /
+  `SymbolResolver` / `DeclarationResolver`. `ModuleSourceExtractor`
+  composes the existing primitives; the implementation mirrors the
+  E6 `GuardSourceExtractor` pattern adapted for the @Module object
+  literal.
+- **Hard boundary:** `provider-ast` was NOT touched in E9. The
+  shape of `ModuleItemView` mirrors `DecoratorArgView` but adds
+  `providerForm` to disambiguate the four NestJS provider object
+  forms.
+- **No invocation:** @Module decorators and their argument values
+  are NEVER executed. Class identifiers are read structurally only.
+- **Import-alias follow-through:** `safeResolveClass` now walks
+  through `ImportSpecifier.symbol` to the original exported symbol
+  and returns the original `ClassDeclaration` for imports — the
+  existing `SymbolResolver` + `DeclarationResolver` are reused.
+- **`extract` always returns:** even when @Module is absent, the
+  module record is preserved with empty arrays. This matches the
+  semantic invariant that downstream consumers see every class.
+
+### `ModuleItemView` fields
+
+| Field | Type | Meaning |
+|---|---|---|
+| `kindName` | `string` | ExpressionInspector classification |
+| `sourceText` | `string \| undefined` | raw `arg.getText()` |
+| `isStatic` | `boolean` | true for bare identifiers + primitives |
+| `resolvedSymbolName` | `string \| undefined` | from SymbolResolver |
+| `resolvedDeclarationKind` | `string \| undefined` | e.g. `"ClassDeclaration"` |
+| `className` | `string \| undefined` | class name when resolvable |
+| `providerForm` | `string \| undefined` | first property name in object form |
+| `children` | `ModuleItemView[]` | nested object / array items |
+
+### `ModuleMetadata` fields
+
+| Field | Type |
+|---|---|
+| `name` | `string` |
+| `classNode` | `ts.ClassDeclaration` |
+| `imports` | `readonly ModuleItemView[]` |
+| `controllers` | `readonly ModuleItemView[]` |
+| `providers` | `readonly ModuleItemView[]` |
+| `exports` | `readonly ModuleItemView[]` |
+
+### `ModuleImportEdge`
+
+| Field | Type |
+|---|---|
+| `fromModuleName` | `string` |
+| `toModuleName` | `string \| undefined` |
+| `item` | `ModuleItemView` |
+
+### Exact command
+```bash
+pnpm test:nest:module
+# or directly (from repo root):
+tsx packages/provider-nestjs/test/module-semantic.test.ts
+```
+
+### MATCH OUTPUT
+
+```
+===== E9 — MODULE RELATIONSHIP SEMANTIC EXTRACTION =====
+
+--- Part A: synthetic @Module ---
+  AppModule        imports=2  controllers=2  providers=4  exports=2  PASS
+  WithDynamicImports imports=1  controllers=0  providers=0  exports=0  PASS
+  WithCallImport     imports=1  controllers=0  providers=0  exports=0  PASS
+  WithObjectProvider imports=0  controllers=0  providers=1  exports=0  PASS
+  WithObjectProvider provider form check kind=object providerForm=provide PASS
+  NoModuleDecorator  imports=0  controllers=0  providers=0  exports=0  PASS
+  Summary: 6/6
+
+--- Part B: synthetic with resolvers ---
+  Summary: 5/5
+
+--- Part C: example-api integration ---
+  Modules: 6
+  AppModule imports=5 controllers=1 providers=1 exports=0 PASS
+  AuthModule imports=0 controllers=0 providers=1 exports=1 PASS
+  CartModule imports=1 controllers=1 providers=1 exports=1 PASS
+  OrdersModule imports=1 controllers=1 providers=1 exports=1 PASS
+  ProductsModule imports=0 controllers=1 providers=1 exports=1 PASS
+  UsersModule imports=1 controllers=1 providers=1 exports=1 PASS
+
+  Edges (parent module -> imported module): 8
+  AppModule  -> [AuthModule,CartModule,OrdersModule,ProductsModule,UsersModule] PASS
+  CartModule -> [AuthModule] PASS
+  OrdersModule -> [AuthModule] PASS
+  UsersModule -> [AuthModule] PASS
+  Summary: modules 6/6 | edges 4/4
+```
+
+### Verification matrix
+
+| E9 requirement | Expected | Actual | Status |
+|---|---|---|---|
+| `@Module({imports:[A,B], controllers:[...], providers:[...], exports:[...]})` | full extraction | matches | **PASS** |
+| `imports: [getModule()]` (call) | `kind=call` | matches | **PASS** |
+| `providers: [{ provide: T, useClass: X }]` | `kind=object, providerForm="provide"` | matches | **PASS** |
+| `imports: [forwardRef(() => X)]` (call) | `kind=call` | matches | **PASS** |
+| Class WITHOUT `@Module` | empty arrays, name preserved | matches | **PASS** |
+| Imported class identifier (`AuthModule`) | resolved via SymbolResolver | matches | **PASS** |
+| Module-to-module import edges | parent → child | matches | **PASS** |
+| Order preservation (AppModule imports order) | matches source order | matches | **PASS** |
+| Duplicate module declarations handled | never produce duplicates | matches | **PASS** |
+| No module / provider / controller instantiation | confirmed | confirmed | **PASS** |
+| No factory / useFactory execution | confirmed | confirmed | **PASS** |
+| Source text preserved verbatim | every `sourceText` matches `arg.getText()` | matches | **PASS** |
+| Dynamic expressions NOT evaluated | confirmed | confirmed | **PASS** |
+
+### Regression result: **PASS**
+- `controller-semantic.test.ts` (E1) — exit 0, 25 lines.
+- `route-semantic.test.ts` (E2) — exit 0, 68 lines.
+- `route-composition-semantic.test.ts` (E3) — exit 0, 76 lines.
+- `parameter-semantic.test.ts` (E4) — exit 0, 56 lines.
+- `type-semantic.test.ts` (E5) — exit 0, 35 lines.
+- `guard-semantic.test.ts` (E6) — exit 0, 21 lines.
+- `pipe-interceptor-filter-semantic.test.ts` (E7) — exit 0, 17 lines.
+- `http-metadata-semantic.test.ts` (E8) — exit 0, 29 lines.
+- `module-semantic.test.ts` (E9) — exit 0, 37 lines.
+- `scopes.test.ts` (D1) — exit 0, 194 lines.
+- `decorator.test.ts` (D1 baseline) — exit 0, 265 lines.
+- Typecheck `provider-ast`: exit 0.
+- Typecheck `provider-nestjs`: exit 0.
+
+### Example-api module relationship results
+The 6 real modules under `apps/example-api/src` resolve to:
+
+```
+AppModule
+  imports (5):  AuthModule, ProductsModule, OrdersModule, CartModule, UsersModule
+  controllers (1): AppController
+  providers  (1): AppService
+  exports   (0):
+AuthModule
+  imports (0):
+  controllers (0):
+  providers  (1): JwtAuthGuard
+  exports   (1): JwtAuthGuard
+ProductsModule
+  imports (0):
+  controllers (1): ProductsController
+  providers  (1): ProductsService
+  exports   (1): ProductsService
+CartModule
+  imports (1): AuthModule
+  controllers (1): CartController
+  providers  (1): CartService
+  exports   (1): CartService
+OrdersModule
+  imports (1): AuthModule
+  controllers (1): OrdersController
+  providers  (1): OrdersService
+  exports   (1): OrdersService
+UsersModule
+  imports (1): AuthModule
+  controllers (1): UsersController
+  providers  (1): UsersService
+  exports   (1): UsersService
+```
+
+Module-to-module edges (parent imports child):
+
+```
+AppModule    -> AuthModule, CartModule, OrdersModule, ProductsModule, UsersModule
+CartModule   -> AuthModule
+OrdersModule -> AuthModule
+UsersModule  -> AuthModule
+```
+
+### Architecture decisions
+- **Reuse discipline:** No new `TypeChecker` / `TypeResolver` /
+  `SymbolResolver` / `DeclarationResolver`. `ModuleSourceExtractor`
+  composes the existing primitives.
+- **Hard boundary:** `provider-ast` was NOT touched in E9.
+- **No invocation:** `@Module` decorators and their argument
+  values are NEVER executed.
+- **Source preservation:** every `sourceText` is `arg.getText()`.
+- **Always-return `extract`:** even when `@Module` is absent, the
+  module record is preserved with empty arrays, so downstream
+  consumers (E10) see every class.
+
+### Known gaps (deferred)
+- The `ModuleImportEdge.toModuleName` resolves to the imported
+  identifier's name (e.g. `"AuthModule"`). When the import is a
+  `forwardRef(() => SomeModule)`, the `toModuleName` is `undefined`
+  (call expression); this is preserved structurally only and E10
+  will decide whether to resolve forward references further.
+- Object-form providers (`useValue`, `useFactory`,
+  `useExisting`) beyond the four standard forms are surfaced with
+  `providerForm=<first property name>` only. Deep semantics for
+  factory argument types are left to E10.
+- Class-scope vs feature-module-vs-dynamic-module distinction is
+  not yet modeled — left to E10.
+
+### Commit
+- `feat(provider-nestjs): extract module relationships`
+
+---
+
+End of E9.
