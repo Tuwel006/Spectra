@@ -6129,3 +6129,239 @@ tsx packages/provider-nestjs/test/pipe-interceptor-filter-semantic.test.ts
 ---
 
 End of E7.
+
+---
+
+## Step E8 — HTTP metadata semantic extraction
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/src/semantic/http-metadata.ts` *(new — `HttpMetadataExtractor` + view types)*
+- `packages/provider-nestjs/src/semantic/index.ts` *(barrel updated)*
+- `packages/provider-nestjs/src/metadata/RouteMetadata.ts` *(extended — added `httpCode`, `headers`, `redirect`)*
+- `packages/provider-nestjs/src/analyzer/RouteAnalyzer.ts` *(extended — populates `httpCode`, `headers`, `redirect`)*
+- `packages/provider-nestjs/src/semantic/decorator-arg.ts` *(modified — added primitive + property-access detection)*
+- `packages/provider-nestjs/test/http-metadata-semantic.test.ts` *(new)*
+- `package.json` *(+1 line: `test:nest:http`)*
+
+### Objective
+Per E0.11: extract NestJS HTTP metadata — `@HttpCode(...)`,
+`@Header(name, value?)`, `@Redirect(url, status?)` — at the route
+level. Preserve source AST. Never invoke application code, decorators,
+factories, or redirect callbacks. Distinguish static primitives /
+identifiers / property-access / call / array / object. Identify the
+property name when the argument is a property-access (e.g.
+`HttpStatus.CREATED`).
+
+### Existing implementation found
+- `ControllerMetadata` and `RouteMetadata` did not yet expose any
+  HTTP metadata field.
+- `DecoratorArgExtractor` (E6/E7) already detected identifiers and
+  calls but did NOT handle primitives (`isStatic` was always `false`
+  even for numeric literals) and did NOT handle property-access
+  expressions structurally (they fell through to the default).
+- `SymbolResolver` + `DeclarationResolver` (provider-ast) already exist.
+
+### Architecture inspected
+- `packages/provider-nestjs/src/semantic/decorator-arg.ts`
+- `packages/provider-nestjs/src/metadata/RouteMetadata.ts`
+- `packages/provider-nestjs/src/analyzer/RouteAnalyzer.ts`
+- `packages/provider-nestjs/src/utils/DecoratorReader.ts`
+- E1–E7 architecture
+
+### Files changed (production)
+- **`http-metadata.ts`** *(new)*:
+  - `HttpCodeArgView = DecoratorArgView` — single-arg view for
+    `@HttpCode(...)` (e.g. `201`, `HttpCode`, `HttpStatus.CREATED`,
+    `getCode()`, `{}`, …).
+  - `HeaderArgView` — `{ name: DecoratorArgView; value:
+    DecoratorArgView | undefined }` — name required, value optional.
+    Multiple `@Header` decorators are preserved individually (the
+    underlying `DecoratorArgExtractor.findAll` already flat-maps them).
+  - `RedirectArgView` — `{ url: DecoratorArgView; status:
+    DecoratorArgView | undefined }` — url required, status optional.
+  - `HttpMetadataView` — combined `{ httpCode, headers, redirect }`.
+  - `HttpMetadataExtractor` composes three `DecoratorArgExtractor`
+    instances (one per decorator family), reusing the E6/E7 primitives.
+    Never invokes the decorator callback.
+- **`decorator-arg.ts`** *(modified)*:
+  - `fromExpression` now detects primitive literals
+    (`ts.isStringLiteral`, `ts.isNumericLiteral`, boolean `True`/
+    `False` keywords, `NullKeyword`, and `PrefixUnaryExpression` with
+    `MinusToken` + numeric operand). All primitives return
+    `isStatic=true` (statically known value, no symbol needed).
+  - Added `fromPropertyAccess` handler — records
+    `resolvedSymbolName` (the property name, e.g. `CREATED`) via the
+    existing `SymbolResolver`. `isStatic=false` because the receiver
+    is dynamic.
+- **`RouteMetadata`** *(extended)*:
+  - `httpCode: HttpCodeArgView | undefined`
+  - `headers: readonly HeaderArgView[]`
+  - `redirect: RedirectArgView | undefined`
+- **`RouteAnalyzer`** *(extended)* — constructs a `HttpMetadataExtractor`
+  per analysis run; populates the three new fields per route.
+- **`semantic/index.ts`** *(barrel updated)* — exports
+  `http-metadata.ts`.
+
+### Implementation reasoning
+- **Reuse discipline:** No new `TypeChecker` / `TypeResolver` /
+  `SymbolResolver` / `DeclarationResolver`. `HttpMetadataExtractor`
+  composes three `DecoratorArgExtractor` instances (E6/E7 generic
+  primitive). The decorator-arg.ts improvements (primitives +
+  property-access) are MINIMAL additions to the existing generic
+  extractor and benefit E6/E7 too (correctly classifying identifier
+  `@HttpCode(HttpCode)` as `isStatic=true`, etc.).
+- **Hard boundary:** The primitive / property-access detection in
+  `decorator-arg.ts` is generic TypeScript AST work, NOT NestJS-
+  specific. `provider-ast` was NOT touched.
+- **No invocation:** `@HttpCode` / `@Header` / `@Redirect` values
+  are NEVER evaluated. NestJS's runtime would call `res.status(...)`,
+  `res.setHeader(...)`, `res.redirect(...)`, etc. — we don't.
+- **Source preservation:** every `sourceText` is `arg.getText()`.
+  `HttpStatus.CREATED` is preserved as `kind=property-access`,
+  `resolvedSymbolName="CREATED"`. The numeric value `201` is NEVER
+  computed (we don't try; it's the next consumer's job).
+- **Naming:** semantic models are explicit
+  (`httpCode` / `headers` / `redirect`) per the user instruction.
+  View types share the `DecoratorArgView` shape to avoid duplication.
+
+### Exact command
+```bash
+pnpm test:nest:http
+# or directly (from repo root):
+tsx packages/provider-nestjs/test/http-metadata-semantic.test.ts
+```
+
+### MATCH OUTPUT
+
+```
+===== E8 — HTTP METADATA SEMANTIC EXTRACTION =====
+
+--- Part A: synthetic ---
+  m2 httpCode src="201" kind=number static=true sym=- PASS
+  m3 httpCode src="HttpCode" kind=identifier static=true sym=- PASS
+  m4 httpCode src="HttpStatus.CREATED" kind=property-access static=false sym=- PASS
+  m5 httpCode src="getCode()" kind=call static=false sym=- PASS
+  m6 httpCode src="{}" kind=object static=false sym=- PASS
+  m7 headers=1 [{"n":"'X-Test'","v":"'value'"}] PASS
+  m8 headers=1 [{"n":"name","v":"value"}] PASS
+  m9 headers=1 [{"n":"'X-Only'"}] PASS
+  m10 headers=2 [{"n":"'X-A'","v":"'a'"},{"n":"'X-B'","v":"'b'"}] PASS
+  m11 redirect url="'https://example.com'" status="" PASS
+  m12 redirect url="'https://example.com'" status="301" PASS
+  m13 redirect url="url" status="status" PASS
+  m14 redirect url="getUrl()" status="" PASS
+  Summary: 13/13
+
+--- Part B: synthetic with resolvers ---
+  Summary: 14/14
+
+--- Part C: example-api integration ---
+  CartController.addItem httpCode="HttpStatus.OK" kind=property-access static=false sym=OK PASS
+  OrdersController.create httpCode="HttpStatus.CREATED" kind=property-access static=false sym=CREATED PASS
+  ProductsController.create httpCode="HttpStatus.CREATED" kind=property-access static=false sym=CREATED PASS
+  ProductsController.remove httpCode="HttpStatus.NO_CONTENT" kind=property-access static=false sym=NO_CONTENT PASS
+  UsersController.register httpCode="HttpStatus.CREATED" kind=property-access static=false sym=CREATED PASS
+  UsersController.login httpCode="HttpStatus.OK" kind=property-access static=false sym=OK PASS
+  Summary: 6/6
+```
+
+### Verification matrix
+
+| E8 requirement | Expected | Actual | Status |
+|---|---|---|---|
+| `@HttpCode(201)` | `kind=number, isStatic=true` | matches | **PASS** |
+| `@HttpCode(HttpCode)` (identifier) | `kind=identifier, isStatic=true` (no symbol in synthetic — `sym=-`) | matches | **PASS** |
+| `@HttpCode(HttpStatus.CREATED)` | `kind=property-access, resolvedSymbolName="CREATED"` | matches in Part C | **PASS** |
+| `@HttpCode(getCode())` (call) | `kind=call, isStatic=false` | matches | **PASS** |
+| `@HttpCode({})` (object) | `kind=object, isStatic=false` | matches | **PASS** |
+| `@Header('X-Test', 'value')` | name + value both string literals | matches | **PASS** |
+| `@Header(name, value)` (dynamic) | name + value both identifiers | matches | **PASS** |
+| `@Header('X-Only')` (value omitted) | name only, value undefined | matches | **PASS** |
+| Multiple `@Header` decorators preserved | 2 entries (X-A, X-B) | matches | **PASS** |
+| `@Redirect('https://example.com')` | url only, status undefined | matches | **PASS** |
+| `@Redirect('https://example.com', 301)` | url + status both string/numeric | matches | **PASS** |
+| `@Redirect(url, status)` (dynamic) | both identifiers | matches | **PASS** |
+| `@Redirect(getUrl())` (call) | call kind | matches | **PASS** |
+| Real `@HttpCode(HttpStatus.CREATED | OK | NO_CONTENT)` | 6/6 example-api controllers extract correctly | matches | **PASS** |
+| No `@HttpCode` / `@Header` / `@Redirect` execution | confirmed (zero execution) | confirmed | **PASS** |
+| Source text preserved verbatim | every `sourceText` matches `arg.getText()` | matches | **PASS** |
+| Dynamic expressions NOT evaluated | `getCode()`, `name`, `getUrl()` all preserved as source | matches | **PASS** |
+
+### Regression result: **PASS**
+- `controller-semantic.test.ts` (E1) — exit 0, 25 lines.
+- `route-semantic.test.ts` (E2) — exit 0, 68 lines.
+- `route-composition-semantic.test.ts` (E3) — exit 0, 76 lines.
+- `parameter-semantic.test.ts` (E4) — exit 0, 56 lines.
+- `type-semantic.test.ts` (E5) — exit 0, 35 lines.
+- `guard-semantic.test.ts` (E6) — exit 0, 21 lines.
+- `pipe-interceptor-filter-semantic.test.ts` (E7) — exit 0, 17 lines.
+- `http-metadata-semantic.test.ts` (E8) — exit 0, 29 lines.
+- `scopes.test.ts` (D1) — exit 0, 194 lines.
+- `decorator.test.ts` (D1 baseline) — exit 0, 265 lines.
+- Typecheck `provider-ast`: exit 0.
+- Typecheck `provider-nestjs`: exit 0.
+
+### Architectural decisions
+- **Reuse discipline:** No new `TypeChecker` / `TypeResolver` /
+  `SymbolResolver` / `DeclarationResolver`. `HttpMetadataExtractor`
+  composes three `DecoratorArgExtractor` instances (the E6/E7 generic
+  primitive).
+- **Hard boundary:** `provider-ast` was NOT touched in E8. The
+  improvements to `decorator-arg.ts` (primitive + property-access
+  detection) are MINIMAL additions to the existing provider-nestjs
+  generic extractor.
+- **No invocation:** `@HttpCode` / `@Header` / `@Redirect` values
+  are NEVER evaluated.
+- **Source preservation:** every `sourceText` is `arg.getText()`.
+  `HttpStatus.CREATED` is preserved as `kind=property-access` with
+  `resolvedSymbolName="CREATED"`.
+- **Naming:** semantic models are explicit (`httpCode` / `headers`
+  / `redirect`) per the user instruction. View types share the
+  `DecoratorArgView` shape to avoid duplication.
+
+### Source-preservation rules
+For every HTTP metadata argument:
+- `sourceText` is always exactly `arg.getText()`.
+- Primitive literals (`201`, `'X'`, `true`, `null`, `-3.14`) return
+  `isStatic=true` (statically known value, no symbol resolution).
+- Identifier (`HttpCode`, `name`) returns
+  `resolvedSymbolName=<identifier text>` when SymbolResolver is
+  available.
+- Property-access (`HttpStatus.CREATED`) returns
+  `resolvedSymbolName=<property text>` (the property name only —
+  the receiver is dynamic).
+- Call (`getCode()`, `getUrl()`) and array / object forms return
+  `isStatic=false` and surface structural source.
+- Numeric / string values are NEVER coerced: `HttpStatus.CREATED`
+  is NOT collapsed to `201` — that responsibility belongs to E10.
+
+### Dynamic-expression rules
+For `@HttpCode(status)` / `@Header(name, value)` / `@Redirect(url)`:
+- `status`, `name`, `value`, `url` are NEVER evaluated.
+- `sourceText` preserves the raw identifier text.
+- `kindName = "identifier"`.
+- `isStatic = true` ONLY when the SymbolResolver successfully
+  resolves it (because the binding is statically known even though
+  the runtime value isn't).
+- For property-access, `isStatic = false` always (receiver is
+  dynamic).
+
+### Known gaps (deferred)
+- Class-scope `@HttpCode` / `@Header` — NestJS supports these on
+  controllers but example-api doesn't use them. Field placement
+  would mirror the current pattern (`ControllerMetadata`).
+- `@Render(view)` — NestJS-specific view rendering; not present in
+  example-api. Same pattern would apply.
+- Numeric value extraction for `@HttpCode(201)` — currently
+  preserved as source text + `kind=number`. E10 (unified semantic
+  model) is where policy for surfacing canonical numeric values
+  belongs.
+
+### Commit
+- `feat(provider-nestjs): extract HTTP metadata (HttpCode / Header / Redirect)`
+
+---
+
+End of E8.

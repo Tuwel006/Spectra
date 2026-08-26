@@ -20,6 +20,7 @@ import {
     InterceptorSourceExtractor,
     PipeSourceExtractor,
 } from "../semantic/decorator-arg";
+import { HttpMetadataExtractor } from "../semantic/http-metadata";
 import { RouteMethodExtractor } from "../semantic/route-method";
 import { RoutePathExtractor } from "../semantic/route-path";
 import { ParameterSourceExtractor } from "../semantic/parameter-source";
@@ -34,6 +35,7 @@ export class RouteAnalyzer {
     private readonly pipeExtractor: PipeSourceExtractor;
     private readonly interceptorExtractor: InterceptorSourceExtractor;
     private readonly filterExtractor: FilterSourceExtractor;
+    private readonly httpMetadataExtractor: HttpMetadataExtractor;
 
     public constructor(
         private readonly methodQuery: MethodQuery,
@@ -94,6 +96,13 @@ export class RouteAnalyzer {
             symbolResolver,
             declarationResolver,
         );
+        this.httpMetadataExtractor = new HttpMetadataExtractor(
+            decoratorReader,
+            _decoratorArguments,
+            _inspector,
+            symbolResolver,
+            declarationResolver,
+        );
         this.parameterQuery = new ParameterQuery(
             new NodeWalker(),
         );
@@ -135,6 +144,7 @@ export class RouteAnalyzer {
                 const interceptors =
                     this.interceptorExtractor.extract(methodNode);
                 const filters = this.filterExtractor.extract(methodNode);
+                const httpMeta = this.httpMetadataExtractor.extract(methodNode);
 
                 routes.push({
 
@@ -169,6 +179,12 @@ export class RouteAnalyzer {
                     interceptors,
 
                     filters,
+
+                    httpCode: httpMeta.httpCode,
+
+                    headers: httpMeta.headers,
+
+                    redirect: httpMeta.redirect,
 
                     methodNode,
 

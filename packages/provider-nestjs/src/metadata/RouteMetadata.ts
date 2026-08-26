@@ -6,6 +6,11 @@ import {
     InterceptorSourceView,
     PipeSourceView,
 } from "../semantic/decorator-arg";
+import {
+    HeaderArgView,
+    HttpCodeArgView,
+    RedirectArgView,
+} from "../semantic/http-metadata";
 import { ParameterTypeView } from "../semantic/parameter-type";
 
 export interface RouteMetadata {
@@ -79,6 +84,24 @@ export interface RouteMetadata {
 
     /** Method-scope @UseFilters arguments (added in E7). */
     readonly filters: readonly FilterSourceView[];
+
+    /**
+     * Method-scope @HttpCode argument (added in E8). `undefined` when
+     * the method has no @HttpCode decorator.
+     */
+    readonly httpCode: HttpCodeArgView | undefined;
+
+    /**
+     * Method-scope @Header decorators (added in E8). Each entry is a
+     * name + (optional) value pair. Empty when no @Header.
+     */
+    readonly headers: readonly HeaderArgView[];
+
+    /**
+     * Method-scope @Redirect argument (added in E8). `undefined`
+     * when the method has no @Redirect decorator.
+     */
+    readonly redirect: RedirectArgView | undefined;
 
     readonly methodNode: ts.MethodDeclaration;
 

@@ -7,3 +7,4 @@ export * from "./parameter-source";
 export * from "./parameter-type";
 export * from "./decorator-arg";
 export * from "./guard-source";
+export * from "./http-metadata";

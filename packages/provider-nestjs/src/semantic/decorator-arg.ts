@@ -111,8 +111,25 @@ export class DecoratorArgExtractor {
         if (ts.isIdentifier(expr)) {
             return this.fromIdentifier(expr, sourceText);
         }
+        if (
+            ts.isStringLiteral(expr) ||
+            ts.isNumericLiteral(expr) ||
+            expr.kind === ts.SyntaxKind.TrueKeyword ||
+            expr.kind === ts.SyntaxKind.FalseKeyword ||
+            expr.kind === ts.SyntaxKind.NullKeyword ||
+            (ts.isPrefixUnaryExpression(expr) &&
+                expr.operator === ts.SyntaxKind.MinusToken &&
+                ts.isNumericLiteral(expr.operand))
+        ) {
+            // Primitives are statically known — no symbol
+            // resolution needed.
+            return this.make(kindName, sourceText, true, []);
+        }
         if (ts.isCallExpression(expr)) {
             return this.fromCallExpression(expr, sourceText);
+        }
+        if (ts.isPropertyAccessExpression(expr)) {
+            return this.fromPropertyAccess(expr, sourceText);
         }
         if (ts.isArrayLiteralExpression(expr)) {
             const children = expr.elements.map(e =>
@@ -161,6 +178,31 @@ export class DecoratorArgExtractor {
             [],
             calleeSymbol?.getName(),
             firstDecl ? ts.SyntaxKind[firstDecl.kind] : undefined,
+            undefined,
+        );
+    }
+
+    private fromPropertyAccess(
+        expr: ts.PropertyAccessExpression,
+        sourceText: string,
+    ): DecoratorArgView {
+        // Property access is supported structurally: we resolve the
+        // property name (e.g. `CREATED` for `HttpStatus.CREATED`) via
+        // the SymbolResolver but NEVER evaluate the receiver. isStatic
+        // is false because the full semantic value depends on the
+        // receiver's runtime state.
+        const propertySymbol = this.safeResolveSymbol(expr);
+        const declarations = this.safeResolveDeclarations(expr);
+        const firstDeclaration = declarations[0];
+        return this.make(
+            "property-access",
+            sourceText,
+            false,
+            [],
+            propertySymbol?.getName(),
+            firstDeclaration
+                ? ts.SyntaxKind[firstDeclaration.kind]
+                : undefined,
             undefined,
         );
     }
