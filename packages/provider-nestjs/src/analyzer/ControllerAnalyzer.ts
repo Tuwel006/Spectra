@@ -1,21 +1,30 @@
 import ts from "typescript";
-import { ClassQuery, ExpressionInspector } from "@spectra/provider-ast";
+import {
+    ClassQuery,
+    DeclarationResolver,
+    ExpressionInspector,
+    SymbolResolver,
+} from "@spectra/provider-ast";
 
 import { ControllerMetadata } from "../metadata";
 import {
     ControllerPathExtractor,
 } from "../semantic/controller-path";
+import { GuardSourceExtractor } from "../semantic/guard-source";
 import { DecoratorArguments, DecoratorReader } from "../utils";
 
 export class ControllerAnalyzer {
 
     private readonly pathExtractor: ControllerPathExtractor;
+    private readonly guardExtractor: GuardSourceExtractor;
 
     public constructor(
         private readonly classQuery: ClassQuery,
         decoratorReader: DecoratorReader,
         decoratorArguments?: DecoratorArguments,
         inspector?: ExpressionInspector,
+        symbolResolver?: SymbolResolver,
+        declarationResolver?: DeclarationResolver,
     ) {
         this.pathExtractor = new ControllerPathExtractor(
             decoratorReader,
@@ -23,10 +32,14 @@ export class ControllerAnalyzer {
                 new DecoratorArguments(),
             inspector ?? new ExpressionInspector(),
         );
-        // Keep the existing constructor signature compatible; the
-        // optional args allow callers (and tests) to inject the
-        // dependencies while existing code paths continue to work.
-        void this.classQuery;
+        this.guardExtractor = new GuardSourceExtractor(
+            decoratorReader,
+            decoratorArguments ??
+                new DecoratorArguments(),
+            inspector ?? new ExpressionInspector(),
+            symbolResolver,
+            declarationResolver,
+        );
     }
 
     public analyze(
@@ -44,6 +57,8 @@ export class ControllerAnalyzer {
                 continue;
             }
 
+            const classGuards = this.guardExtractor.extract(classNode);
+
             controllers.push({
                 name: classNode.name?.text ?? "Anonymous",
                 path: pathView.normalized,
@@ -53,6 +68,7 @@ export class ControllerAnalyzer {
                 controllerPathValue: pathView.value,
                 classNode,
                 tags: [],
+                classGuards,
                 routes: [],
             });
 

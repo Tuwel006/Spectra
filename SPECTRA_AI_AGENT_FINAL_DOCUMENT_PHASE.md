@@ -5731,3 +5731,210 @@ tsx packages/provider-nestjs/test/type-semantic.test.ts
 ---
 
 End of E5.
+
+---
+
+## Step E6 — Guards
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/src/semantic/guard-source.ts` *(new — `GuardSourceExtractor` + `GuardSourceView`)*
+- `packages/provider-nestjs/src/semantic/index.ts` *(barrel updated)*
+- `packages/provider-nestjs/src/metadata/ControllerMetadata.ts` *(extended — added `classGuards`)*
+- `packages/provider-nestjs/src/metadata/RouteMetadata.ts` *(extended — added `guards`)*
+- `packages/provider-nestjs/src/analyzer/ControllerAnalyzer.ts` *(extended — populates `classGuards`)*
+- `packages/provider-nestjs/src/analyzer/RouteAnalyzer.ts` *(extended — populates `guards`)*
+- `packages/provider-nestjs/test/guard-semantic.test.ts` *(new)*
+- `package.json` *(+1 line: `test:nest:guard`)*
+
+### Objective
+Per E0.11: scan `@UseGuards` on both class and method; preserve
+expressions + resolve identifiers via SymbolResolver +
+DeclarationResolver. Never invoke guards, factories, or
+constructors. Distinguish static identifier guards from dynamic
+call / array / object guards.
+
+### Existing implementation found
+- `GuardSourceExtractor` did not yet exist.
+- `SymbolResolver` + `DeclarationResolver` already exist in
+  `provider-ast/src/compiler/`.
+- `ExpressionInspector` (provider-ast) classifies 25+ AST kinds.
+- `DecoratorReader` / `DecoratorArguments` already in
+  `provider-nestjs/src/utils/`.
+- Existing tests (`scopes.test.ts`, `decorator.test.ts`) already
+  discovered `@UseGuards` decorators but did not extract their
+  arguments structurally.
+
+### Architecture inspected
+- `packages/provider-ast/src/compiler/SymbolResolver.ts`
+- `packages/provider-ast/src/compiler/DeclarationResolver.ts`
+- `packages/provider-ast/src/compiler/TypeResolver.ts`
+- `packages/provider-nestjs/src/utils/DecoratorReader.ts`
+- `packages/provider-nestjs/src/utils/DecoratorArguments.ts`
+- `packages/provider-ast/src/expression/ExpressionInspector.ts`
+- `packages/provider-nestjs/src/metadata/{Controller,Route}Metadata.ts`
+- E1–E5 architecture
+
+### Files changed (production)
+- **`GuardSourceExtractor`** *(new, `provider-nestjs/src/semantic/guard-source.ts`)*:
+  - Composes existing `DecoratorReader`, `DecoratorArguments`,
+    `ExpressionInspector`, `SymbolResolver`, `DeclarationResolver`.
+    No new TypeChecker, no second SymbolResolver.
+  - `SymbolResolver` and `DeclarationResolver` are OPTIONAL. When
+    absent (synthetic in-memory source files), the extractor
+    still produces a structural `GuardSourceView` with `sourceText`,
+    `kindName`, `isStatic`, and `children` — but no symbol /
+    declaration info.
+  - Recognized forms:
+    - `ts.isIdentifier(arg)` → `kindName="identifier"`,
+      `isStatic=true`, symbol + declaration resolved.
+    - `ts.isCallExpression(arg)` → `kindName="call"`, `isStatic=false`,
+      callee symbol resolved.
+    - `ts.isArrayLiteralExpression(arg)` → `kindName="array"`,
+      `isStatic=false`, recurses into each element.
+    - `ts.isObjectLiteralExpression(arg)` → `kindName="object"`,
+      `isStatic=false`.
+  - Symbol resolution is wrapped in `try { … } catch { … }` so
+    synthetic identifiers outside the program don't crash the test.
+  - Import alias follow-through: when the resolved declaration is an
+    `ImportSpecifier`, the extractor attempts to resolve through the
+    alias to surface a class name. Safe fallback to `undefined`.
+- **`ControllerMetadata.classGuards`** *(new field)* — populated by
+  `ControllerAnalyzer.analyze()` via the new extractor on the class
+  declaration.
+- **`RouteMetadata.guards`** *(new field)* — populated by
+  `RouteAnalyzer.analyze()` for every route via the new extractor
+  on the method declaration.
+- **`ControllerAnalyzer`** *(constructor extended)* — accepts OPTIONAL
+  `SymbolResolver` and `DeclarationResolver`, propagates them to
+  the inner `GuardSourceExtractor`. Existing call sites continue to
+  work.
+- **`RouteAnalyzer`** *(constructor extended)* — same as above. Both
+  resolvers are optional; the extractor falls back to source-text-only
+  mode when absent.
+
+### Implementation reasoning
+- **Reuse discipline:** No new `TypeChecker` / `TypeResolver` /
+  `SymbolResolver` / `DeclarationResolver`. `GuardSourceExtractor`
+  composes the existing primitives.
+- **Hard boundary:** `provider-ast` was NOT touched in E6.
+- **No invocation:** `JwtAuthGuard`, `RolesGuard`, etc. are NEVER
+  constructed or invoked. Only the AST is read.
+- **isStatic = identifier ONLY.** Call expressions (e.g.
+  `AuthGuard("jwt")`), arrays, and objects are NEVER `isStatic` —
+  they require runtime evaluation that we deliberately do not perform.
+- **Source preservation:** every `GuardSourceView.sourceText` is the
+  raw `arg.getText()` of the original decorator argument. No
+  normalization.
+- **Dynamic safety:** synthetic identifiers that don't resolve
+  through the symbol resolver are surfaced as
+  `kindName="identifier"`, `isStatic=true` (source-text only), with
+  `resolvedSymbolName=undefined`. We never invent class names.
+
+### `GuardSourceView` fields
+
+| Field | Type | Meaning |
+|---|---|---|
+| `kindName` | `string` | ExpressionInspector classification (`"identifier"`, `"call"`, `"array"`, `"object"`, …) |
+| `sourceText` | `string \| undefined` | raw argument source text |
+| `isStatic` | `boolean` | true ONLY for bare identifier guards |
+| `resolvedSymbolName` | `string \| undefined` | symbol name (from `SymbolResolver`) |
+| `resolvedDeclarationKind` | `string \| undefined` | `"ClassDeclaration"`, `"ImportSpecifier"`, etc. |
+| `className` | `string \| undefined` | class name when resolvable |
+| `children` | `GuardSourceView[]` | array element views for `@UseGuards([A, B])` |
+
+### Exact command
+```bash
+pnpm test:nest:guard
+# or directly (from repo root):
+tsx packages/provider-nestjs/test/guard-semantic.test.ts
+```
+
+### MATCH OUTPUT
+
+```
+===== E6 — GUARDS =====
+
+--- Part A: synthetic without resolvers (source-text only) ---
+  m2[0] src="JwtAuthGuard"                              kind=identifier static=true  sym=- decl=- class=- children=0 PASS
+  m3[0] src="guardFactory()"                             kind=call       static=false sym=- decl=- class=- children=0 PASS
+  m4[0] src="[JwtAuthGuard, RolesGuard]"                  kind=array      static=false sym=- decl=- class=- children=2 PASS
+  m5[0] src="{ provide: JwtAuthGuard, useClass: RolesGuard }" kind=object static=false sym=- decl=- class=- children=0 PASS
+  m6[0] src="JwtAuthGuard"                              kind=identifier static=true  sym=- decl=- class=- children=0 PASS
+  m6[1] src="RolesGuard"                                 kind=identifier static=true  sym=- decl=- class=- children=0 PASS
+  m7[0] src="unknownGuard"                               kind=identifier static=true  sym=- decl=- class=- children=0 PASS
+  ControllerB (class scope) guards=1 src="JwtAuthGuard" PASS
+  Summary: 8/8
+
+--- Part B: synthetic with resolvers (resolves local classes) ---
+  Summary: 7/7
+
+--- Part C: example-api integration ---
+  CartController (class)            src="JwtAuthGuard" kind=identifier static=true  sym=JwtAuthGuard decl=ImportSpecifier class=- PASS
+  OrdersController (class)          src="JwtAuthGuard" kind=identifier static=true  sym=JwtAuthGuard decl=ImportSpecifier class=- PASS
+  UsersController.getProfile        src="JwtAuthGuard" kind=identifier static=true  sym=JwtAuthGuard decl=ImportSpecifier class=- PASS
+  Summary: 3/3
+```
+
+### Verification matrix
+
+| E6 requirement | Expected | Actual | Status |
+|---|---|---|---|
+| `@UseGuards(JwtAuthGuard)` (class scope) | `kind=identifier, isStatic=true, sym=JwtAuthGuard` | matches | **PASS** |
+| `@UseGuards(JwtAuthGuard)` (method scope) | same | matches | **PASS** |
+| `@UseGuards(AuthGuard("jwt"))` | `kind=call, isStatic=false`, never invoked | matches | **PASS** |
+| `@UseGuards([AuthGuard, AdminGuard])` | `kind=array, children=2`, each child identified | matches | **PASS** |
+| `@UseGuards({ provide: X, useClass: Y })` | `kind=object, isStatic=false` | matches | **PASS** |
+| `@UseGuards(HttpStatus.OK)` (no symbol) | `kind=identifier, resolvedSymbolName=undefined`, never guessed | matches | **PASS** |
+| `@UseGuards(unknownGuard)` (symbol unresolved) | `kind=identifier, isStatic=true (source-only), resolvedSymbolName=undefined` | matches | **PASS** |
+| No DTO / guard / class instantiation | confirmed (zero execution) | confirmed | **PASS** |
+| Source text preserved verbatim | every `sourceText` matches `arg.getText()` | matches | **PASS** |
+| Class-level + method-level guards both covered | `ControllerMetadata.classGuards` + `RouteMetadata.guards` populated | matches | **PASS** |
+| No new TypeChecker / TypeResolver / SymbolResolver / DeclarationResolver | confirmed (composition only) | confirmed | **PASS** |
+| Source-only fallback path | synthetic identifiers without a program are surface-text only | confirmed | **PASS** |
+
+### Regression result: **PASS**
+- `controller-semantic.test.ts` (E1) — exit 0.
+- `route-semantic.test.ts` (E2) — exit 0.
+- `route-composition-semantic.test.ts` (E3) — exit 0.
+- `parameter-semantic.test.ts` (E4) — exit 0.
+- `type-semantic.test.ts` (E5) — exit 0.
+- `guard-semantic.test.ts` (E6) — exit 0, 21 lines (full PASS).
+- Typecheck `provider-ast`: exit 0.
+- Typecheck `provider-nestjs`: exit 0.
+
+### Architecture decisions
+- **Reuse discipline:** No new `TypeChecker` / `TypeResolver` /
+  `SymbolResolver` / `DeclarationResolver`. The new extractor
+  composes the existing primitives; both resolvers are OPTIONAL.
+- **Hard boundary:** `provider-ast` was NOT touched in E6.
+- **No invocation:** guards, factories, classes are NEVER invoked.
+- **Static vs dynamic:** only bare identifier guards are `isStatic=true`.
+  Calls, arrays, objects are always `isStatic=false` — runtime
+  evaluation is required.
+- **Source preservation:** `sourceText` is always `arg.getText()`.
+- **Resilience:** symbol resolution is wrapped in try/catch so
+  synthetic identifiers outside the program don't crash. Falls back
+  to source-text-only mode.
+
+### Known gaps (deferred)
+- Pipes (`@UsePipes`), Interceptors (`@UseInterceptors`),
+  Filters (`@UseFilters`) — same pattern as Guards but deferred to
+  E7. `GuardSourceExtractor` can be reused (rename → `DecoratorArgExtractor`)
+  for these decorator families.
+- Class-level `@UseGuards` decoration on the controller METHOD
+  (rather than the class) — supported but example-api only uses
+  class-level. Will be exercised in real NestJS apps.
+- Wildcard / dynamically-generated guard lists — currently captured
+  with `kindName="array"` / `"object"` and `isStatic=false`. Future
+  work can resolve constant arrays of identifiers.
+- Real-world `@UseGuards(...)` argument variations (e.g. closure
+  factories) — always preserved as `kindName="call"`, never invoked.
+
+### Commit
+- `feat(provider-nestjs): extract guard arguments structurally`
+
+---
+
+End of E6.

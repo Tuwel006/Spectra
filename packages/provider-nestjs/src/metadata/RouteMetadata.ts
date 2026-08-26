@@ -1,5 +1,6 @@
 import ts from "typescript";
 import { HttpMethod } from "@spectra/core";
+import { GuardSourceView } from "../semantic/guard-source";
 import { ParameterTypeView } from "../semantic/parameter-type";
 
 export interface RouteMetadata {
@@ -58,6 +59,12 @@ export interface RouteMetadata {
      * methods that take no parameters.
      */
     readonly parameters: readonly ParameterMetadata[];
+
+    /**
+     * Method-scope @UseGuards arguments (added in E6). Same
+     * `GuardSourceView` shape as `ControllerMetadata.classGuards`.
+     */
+    readonly guards: readonly GuardSourceView[];
 
     readonly methodNode: ts.MethodDeclaration;
 

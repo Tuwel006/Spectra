@@ -7,11 +7,14 @@ import {
     MethodQuery,
     NodeWalker,
     ParameterQuery,
+    SymbolResolver,
     TypeResolver,
+    DeclarationResolver,
 } from "@spectra/provider-ast";
 
 import { ControllerMetadata, RouteMetadata } from "../metadata";
 import { composeRoutePath } from "../semantic/route-composition";
+import { GuardSourceExtractor } from "../semantic/guard-source";
 import { RouteMethodExtractor } from "../semantic/route-method";
 import { RoutePathExtractor } from "../semantic/route-path";
 import { ParameterSourceExtractor } from "../semantic/parameter-source";
@@ -22,6 +25,7 @@ export class RouteAnalyzer {
     private readonly methodExtractor: RouteMethodExtractor;
     private readonly parameterExtractor: ParameterSourceExtractor;
     private readonly parameterQuery: ParameterQuery;
+    private readonly guardExtractor: GuardSourceExtractor;
 
     public constructor(
         private readonly methodQuery: MethodQuery,
@@ -29,6 +33,8 @@ export class RouteAnalyzer {
         decoratorArguments?: DecoratorArguments,
         inspector?: ExpressionInspector,
         typeResolver?: TypeResolver,
+        symbolResolver?: SymbolResolver,
+        declarationResolver?: DeclarationResolver,
         methodExtractor?: RouteMethodExtractor,
         parameterExtractor?: ParameterSourceExtractor,
     ) {
@@ -52,13 +58,16 @@ export class RouteAnalyzer {
                 _inspector,
                 new ParameterTypeExtractor(typeResolver),
             );
+        this.guardExtractor = new GuardSourceExtractor(
+            decoratorReader,
+            _decoratorArguments,
+            _inspector,
+            symbolResolver,
+            declarationResolver,
+        );
         this.parameterQuery = new ParameterQuery(
             new NodeWalker(),
         );
-        // The methodQuery is used by RouteAnalyzer.analyze(); the
-        // parameterQuery shares a fresh stateless NodeWalker since
-        // NodeQuery.execute only needs the walker for the
-        // recursive-walk path (which we override for direct params).
     }
 
     public analyze(
@@ -92,6 +101,8 @@ export class RouteAnalyzer {
                         this.parameterExtractor.extract(p, i),
                     );
 
+                const guards = this.guardExtractor.extract(methodNode);
+
                 routes.push({
 
                     name: methodNode.name.getText(),
@@ -117,6 +128,8 @@ export class RouteAnalyzer {
                     composedPath,
 
                     parameters,
+
+                    guards,
 
                     methodNode,
 

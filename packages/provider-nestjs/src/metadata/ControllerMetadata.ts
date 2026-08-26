@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { GuardSourceView } from "../semantic/guard-source";
 import { RouteMetadata } from "./RouteMetadata";
 
 export interface ControllerMetadata {
@@ -32,6 +33,14 @@ export interface ControllerMetadata {
     readonly version?: string;
 
     readonly tags: readonly string[];
+
+    /**
+     * Class-scope @UseGuards arguments (added in E6). Each argument
+     * is surfaced as a `GuardSourceView` (identifier / call / array /
+     * object) with source text and (where applicable) resolved
+     * symbol / declaration information. Guards are NEVER invoked.
+     */
+    readonly classGuards: readonly GuardSourceView[];
 
     readonly routes: readonly RouteMetadata[];
 
