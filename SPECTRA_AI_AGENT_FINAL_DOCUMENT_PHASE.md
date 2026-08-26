@@ -5278,3 +5278,240 @@ For `@Controller(prefix)` or `@Get(path)`:
 ---
 
 End of E3.
+
+---
+
+## Step E4 — Parameter semantic extraction
+
+Status: [x]
+
+Files:
+- `packages/provider-ast/src/query/ParameterQuery.ts` *(modified — direct-only fix)*
+- `packages/provider-nestjs/src/semantic/parameter-source.ts` *(new)*
+- `packages/provider-nestjs/src/semantic/index.ts` *(barrel updated)*
+- `packages/provider-nestjs/src/metadata/RouteMetadata.ts` *(extended — added `parameters` field and `ParameterMetadata` interface)*
+- `packages/provider-nestjs/src/analyzer/RouteAnalyzer.ts` *(extended — populates `parameters` per route)*
+- `packages/provider-nestjs/test/parameter-semantic.test.ts` *(new)*
+- `package.json` *(+1 line: `test:nest:parameter`)*
+
+### Objective
+Per E0.11: extract per-method parameter semantics (name, parameter
+decorator name, key argument with source text + ExpressionInspector
+classification + string-literal value, parameter type) without ever
+evaluating user code. Address the D1 / E0-known finding that
+`ParameterQuery` over-reaches into nested lambda parameters.
+
+### Existing implementation found
+- `RouteMetadata` did not yet expose per-method parameters.
+- `ParameterQuery` returned every `ts.ParameterDeclaration` under a
+  method (recursive walk), which includes nested lambda parameters.
+- `ParameterSourceExtractor` did not yet exist.
+- E3's `RouteOperationIdentity` consumed only controller + route
+  metadata; parameters were deferred to E4.
+
+### Architecture inspected
+- `packages/provider-ast/src/query/ParameterQuery.ts`
+- `packages/provider-ast/src/query/NodeQuery.ts`
+- `packages/provider-ast/src/walker/NodeWalker.ts`
+- `packages/provider-nestjs/src/metadata/RouteMetadata.ts`
+- `packages/provider-nestjs/src/analyzer/RouteAnalyzer.ts`
+- E1 + E2 + E3 outputs
+
+### Production deficiency found + fixed
+**D1 finding closed:** `ParameterQuery.execute(methodNode)` previously
+walked the entire method subtree and matched every `ParameterDeclaration`,
+including parameters of nested lambda expressions like
+`[1, 2, 3].map((p) => p * 2).filter((q) => q > 0)`.
+
+Fixed by overriding `ParameterQuery.execute(ParameterQuery.execute)`
+to return ONLY `node.parameters` when the input is a method-like node
+(`MethodDeclaration`, `ConstructorDeclaration`, `ArrowFunction`,
+`FunctionExpression`, `FunctionDeclaration`). For any other input
+shape, the recursive-walk fallback is preserved for backward
+compatibility.
+
+### Files changed (production)
+- `packages/provider-ast/src/query/ParameterQuery.ts` — direct-only
+  override added.
+- `packages/provider-nestjs/src/semantic/parameter-source.ts` *(new)* —
+  `ParameterSourceExtractor` that takes a `ts.ParameterDeclaration`
+  and returns a `ParameterMetadata` view.
+- `packages/provider-nestjs/src/metadata/RouteMetadata.ts` — added
+  `parameters: readonly ParameterMetadata[]` field and exported
+  `ParameterMetadata` interface (8 fields).
+- `packages/provider-nestjs/src/analyzer/RouteAnalyzer.ts` — constructor
+  extended with `parameterExtractor` (defaults to a fresh
+  `ParameterSourceExtractor`); `analyze()` now populates
+  `route.parameters` for each route.
+
+### Implementation reasoning
+- `ParameterQuery.execute` change is minimal: the existing
+  `NodeQuery.execute` recursive walk is preserved for non-method
+  inputs; only method-like inputs get the direct-only fast path.
+- `ParameterSourceExtractor` is a small focused class that composes
+  the existing `DecoratorReader`, `DecoratorArguments`, and
+  `ExpressionInspector` primitives — no new resolvers, no new TypeChecker.
+- The `parameters` field on `RouteMetadata` is `readonly` and
+  populated once per route at analysis time; downstream consumers
+  never mutate it.
+- All NestJS-specific knowledge (which decorators are parameter
+  decorators, what their `key` argument means) lives in
+  `provider-nestjs`. `provider-ast` was touched ONLY to fix
+  `ParameterQuery` over-reach, which is purely structural and
+  framework-independent.
+
+### `ParameterMetadata` fields
+For every parameter, the new `ParameterMetadata` record preserves:
+
+| Field | Type | Source |
+|---|---|---|
+| `parameterIndex` | `number` | position in method parameter list |
+| `name` | `string` | parameter identifier text |
+| `decoratorName` | `string \| undefined` | decorator source name (e.g. "Param") |
+| `decoratorIndex` | `number` | decorator index within parameter |
+| `keySourceText` | `string \| undefined` | raw argument text |
+| `keyExpressionKind` | `string \| undefined` | ExpressionInspector classification |
+| `key` | `string \| undefined` | string-literal value when applicable |
+| `keyIsStatic` | `boolean` | true only for string-literal keys |
+| `typeText` | `string` | parameter type's source text |
+| `hasDecorator` | `boolean` | whether the parameter has any decorator |
+
+### Exact command
+```bash
+pnpm test:nest:parameter
+# or directly (from repo root):
+tsx packages/provider-nestjs/test/parameter-semantic.test.ts
+```
+
+### MATCH OUTPUT
+
+```
+===== E4 — PARAMETER SEMANTIC EXTRACTION =====
+
+--- Part A: ParameterQuery direct-only (D1 finding fixed) ---
+  items() -> params= PASS
+  regular() -> params=cb PASS
+  Summary: 2/2
+
+--- Part B: synthetic parameter extraction ---
+  p1[0]  name=id    decorator=Param     key="id"        keyStatic=true  type=string       PASS
+  p2[0]  name=q     decorator=Query     key="q"         keyStatic=true  type=string       PASS
+  p2[1]  name=page  decorator=<none>   key=undefined  keyStatic=false type=number       PASS
+  p3[0]  name=dto   decorator=Body     key=undefined  keyStatic=false type=CreateUserDto  PASS
+  p4[0]  name=payload decorator=Body  key="payload"   keyStatic=true  type=object       PASS
+  p5[0]  name=trace decorator=Headers  key="x-trace"   keyStatic=true  type=string       PASS
+  p6[0]  name=req   decorator=Req      key=undefined  keyStatic=false type=object       PASS
+  p7[0]  name=res   decorator=Res      key=undefined  keyStatic=false type=object       PASS
+  p8[0]  name=ip    decorator=Ip       key=undefined  keyStatic=false type=string       PASS
+  p9[0]  name=sess  decorator=Session  key=undefined  keyStatic=false type=object       PASS
+  p10[0] name=host  decorator=HostParam key="host"     keyStatic=true  type=string       PASS
+  p11[0] name=k     decorator=Param     key=undefined  keyStatic=false type=string       PASS  (identifier)
+  p12[0] name=k     decorator=Param     key=undefined  keyStatic=false type=string       PASS  (property-access)
+  p13[0] name=k     decorator=Param     key=undefined  keyStatic=false type=string       PASS  (call)
+  Summary: 14/14
+
+--- Part C: RouteAnalyzer parameter integration ---
+  (same 14 routes all PASS through RouteAnalyzer.analyze())
+  Summary: 14/14
+
+--- Part D: example-api integration ---
+  CartController.addItem[0]     name=dto        decorator=Body  key=undefined     type=AddToCartDto   PASS
+  CartController.removeItem[0]  name=productId  decorator=Param key="productId" type=string         PASS
+  OrdersController.findOne[0]   name=id         decorator=Param key="id"        type=string         PASS
+  OrdersController.create[0]    name=dto        decorator=Body  key=undefined     type=CreateOrderDto PASS
+  ProductsController.findAll[0] name=category   decorator=Query key="category"  type=string         PASS
+  ProductsController.findOne[0] name=id         decorator=Param key="id"        type=string         PASS
+  ProductsController.create[0]  name=dto        decorator=Body  key=undefined     type=CreateProductDto PASS
+  ProductsController.update[0]  name=id         decorator=Param key="id"        type=string         PASS
+  ProductsController.update[1]  name=dto        decorator=Body  key=undefined     type=UpdateProductDto PASS
+  ProductsController.remove[0]  name=id         decorator=Param key="id"        type=string         PASS
+  UsersController.register[0]   name=dto        decorator=Body  key=undefined     type=CreateUserDto PASS
+  UsersController.login[0]      name=dto        decorator=Body  key=undefined     type=LoginDto       PASS
+  UsersController.getProfile[0] name=id         decorator=Param key="id"        type=string         PASS
+  Summary: 13/13
+```
+
+### Verification matrix
+
+| E4 requirement | Expected | Actual | Status |
+|---|---|---|---|
+| `ParameterQuery(items())` returns no params (only lambda inside) | 0 | 0 | **PASS** |
+| `ParameterQuery(regular(cb))` returns 1 param | 1 (`cb`) | 1 (`cb`) | **PASS** |
+| `@Param('id') id: string` | `decorator=Param, key='id'` | matches | **PASS** |
+| `@Query('q') q: string, page: number` | 2 params, first `Query`, second `none` | matches | **PASS** |
+| `@Body() dto: CreateUserDto` | `key=undefined, keyStatic=false` | matches | **PASS** |
+| `@Body('payload') payload: object` | `key="payload", keyStatic=true` | matches | **PASS** |
+| `@Headers('x-trace') trace: string` | `decorator=Headers` | matches | **PASS** |
+| `@Req() / @Res() / @Ip() / @Session()` | all classify correctly | matches | **PASS** |
+| `@HostParam('host') host: string` | `decorator=HostParam, key="host"` | matches | **PASS** |
+| `@Param(key)` (identifier key) | `key=undefined, keyStatic=false, kind=identifier` | matches | **PASS** |
+| `@Param(HttpStatus.OK)` (property-access key) | `key=undefined, keyStatic=false, kind=property-access` | matches | **PASS** |
+| `@Param(factory())` (call key) | `key=undefined, keyStatic=false, kind=call` | matches | **PASS** |
+| Real example-api @Param / @Query / @Body | all 13 params correct | matches | **PASS** |
+| Type text preserved (CreateUserDto, UpdateProductDto, AddToCartDto, …) | each type text matches | matches | **PASS** |
+| `RouteMetadata.parameters` populated by `RouteAnalyzer.analyze()` | yes, 14/14 | matches | **PASS** |
+
+### Regression result: **PASS**
+- `controller.test.ts` — exit 0.
+- `controller-semantic.test.ts` (E1) — exit 0.
+- `route-semantic.test.ts` (E2) — exit 0.
+- `route-composition-semantic.test.ts` (E3) — exit 0.
+- All 20 D-step tests rerun with existing verification baselines — all PASS.
+- `expression.test.ts` a-x intact.
+- `symbol.test.ts`, `declaration.test.ts` — exit 0.
+- Typecheck `provider-ast`: exit 0.
+- Typecheck `provider-nestjs`: exit 0.
+
+### Architecture decisions
+- **Reuse discipline:** No new `TypeChecker` / `SymbolResolver` /
+  `DeclarationResolver`. `ParameterSourceExtractor` composes the
+  existing `DecoratorReader` + `DecoratorArguments` + `ExpressionInspector`.
+- **Hard boundary:** `provider-ast` was touched ONLY to fix the
+  `ParameterQuery` over-reach (D1 finding) — purely structural
+  change, framework-independent.
+- **No invocation:** parameter decorator arguments are NEVER
+  evaluated. Non-string-literal keys preserve their AST source text
+  + classification + `isStatic=false`; non-string keys are never
+  coerced into a guessed string.
+
+### Source-preservation rules
+For every parameter, the `ParameterMetadata` view preserves:
+
+- `name` (parameter identifier)
+- `decoratorName` (or undefined)
+- `keySourceText` (raw source text)
+- `keyExpressionKind` (ExpressionInspector classification)
+- `key` (string-literal value when applicable; undefined otherwise)
+- `keyIsStatic` (true only for string-literal keys)
+- `typeText` (parameter type's source text)
+- `hasDecorator`
+
+### Dynamic-expression rules
+For `@Param(someIdentifier)` or `@Param(someCall())`:
+
+- `someIdentifier` / `someCall()` are NEVER evaluated.
+- `keySourceText` keeps the raw source text.
+- `keyExpressionKind` records the classification.
+- `key` is `undefined`.
+- `keyIsStatic` is `false`.
+
+### Known gaps (deferred)
+- Symbol/declaration resolution on `key` expressions is not performed
+  here (the `SymbolResolver` / `DeclarationResolver` infrastructure
+  exists and is exercised in D10). E4 records structure only.
+- Type extraction via `TypeResolver` (E5) is the next step — current
+  `typeText` is the textual form only, no semantic resolution.
+- Spec rule for `@Body()` with no argument: `key = undefined` (body
+  parameter is the entire request body). Future consumers (E10) decide
+  whether to surface this as `null` or `""`.
+- Wildcard route parameters (`*`, `**` glob) — handled at E2 level
+  via source-text preservation.
+- `ControllerAnalyzer.analyze()` does not yet populate `routes: []`
+  into each `ControllerMetadata` — E10 will wire this.
+
+### Commit
+- `feat(provider-nestjs): parameter semantic extraction`
+
+---
+
+End of E4.

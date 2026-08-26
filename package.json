@@ -42,6 +42,7 @@
     "test:nest:controller-semantic": "tsx packages/provider-nestjs/test/controller-semantic.test.ts",
     "test:nest:route-semantic": "tsx packages/provider-nestjs/test/route-semantic.test.ts",
     "test:nest:composition": "tsx packages/provider-nestjs/test/route-composition-semantic.test.ts",
+    "test:nest:parameter": "tsx packages/provider-nestjs/test/parameter-semantic.test.ts",
     "test:ast:expression": "tsx packages/provider-ast/test/expression.test.ts",
     "test:nest:symbol": "tsx packages/provider-nestjs/test/symbol.test.ts",
     "test:nest:declaration": "tsx packages/provider-nestjs/test/declaration.test.ts",

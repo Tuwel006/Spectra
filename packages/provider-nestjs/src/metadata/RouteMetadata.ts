@@ -52,6 +52,66 @@ export interface RouteMetadata {
      */
     readonly composedPath: string;
 
+    /**
+     * Per-method parameter semantics. Added in E4. Empty for
+     * methods that take no parameters.
+     */
+    readonly parameters: readonly ParameterMetadata[];
+
     readonly methodNode: ts.MethodDeclaration;
+
+}
+
+/**
+ * Per-parameter semantic record (E4).
+ *
+ * Preserves the parameter name, the parameter decorator (if any),
+ * the key argument (with source text + ExpressionInspector
+ * classification), and the parameter's TypeScript type text.
+ *
+ * Source-preservation rules:
+ *   - `name` is the parameter identifier text (e.g. "id").
+ *   - `decoratorName` is the source-side decorator name (e.g. "Param",
+ *     "Query", "Body") when present; undefined otherwise.
+ *   - `keySourceText` is the raw argument text (e.g. `"id"`, `id`,
+ *     `HttpStatus.OK`); undefined when the decorator has no argument.
+ *   - `keyExpressionKind` is the ExpressionInspector classification
+ *     of the key argument; undefined when no argument.
+ *   - `key` is the string-literal value when applicable; undefined
+ *     otherwise. Never coerced from non-string-literal expressions.
+ *   - `keyIsStatic` is true only when `key` was a string literal.
+ *   - `typeText` is the parameter type's source text.
+ */
+export interface ParameterMetadata {
+
+    /** Source-order position (0-based) of the parameter. */
+    readonly parameterIndex: number;
+
+    /** Parameter identifier name (e.g. "id", "category", "dto"). */
+    readonly name: string;
+
+    /** Parameter decorator name (e.g. "Param", "Query", "Body") or undefined. */
+    readonly decoratorName: string | undefined;
+
+    /** Decorator index among all decorators on the parameter. */
+    readonly decoratorIndex: number;
+
+    /** Raw source text of the key argument, or undefined. */
+    readonly keySourceText: string | undefined;
+
+    /** ExpressionInspector classification of the key argument, or undefined. */
+    readonly keyExpressionKind: string | undefined;
+
+    /** String-literal value of the key argument when applicable, or undefined. */
+    readonly key: string | undefined;
+
+    /** True when the key is a statically-known string literal. */
+    readonly keyIsStatic: boolean;
+
+    /** Parameter type's source text (e.g. "string", "number", "CreateUserDto"). */
+    readonly typeText: string;
+
+    /** Whether the parameter has any decorator. */
+    readonly hasDecorator: boolean;
 
 }
