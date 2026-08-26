@@ -45,6 +45,7 @@
     "test:nest:parameter": "tsx packages/provider-nestjs/test/parameter-semantic.test.ts",
     "test:nest:type": "tsx packages/provider-nestjs/test/type-semantic.test.ts",
     "test:nest:guard": "tsx packages/provider-nestjs/test/guard-semantic.test.ts",
+    "test:nest:pif": "tsx packages/provider-nestjs/test/pipe-interceptor-filter-semantic.test.ts",
     "test:ast:expression": "tsx packages/provider-ast/test/expression.test.ts",
     "test:nest:symbol": "tsx packages/provider-nestjs/test/symbol.test.ts",
     "test:nest:declaration": "tsx packages/provider-nestjs/test/declaration.test.ts",

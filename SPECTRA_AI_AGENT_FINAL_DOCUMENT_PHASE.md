@@ -5938,3 +5938,194 @@ tsx packages/provider-nestjs/test/guard-semantic.test.ts
 ---
 
 End of E6.
+
+---
+
+## Step E7 — Pipes / Interceptors / Filters
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/src/semantic/decorator-arg.ts` *(new — generic `DecoratorArgExtractor` + `DecoratorArgView` + semantic-name subclasses)*
+- `packages/provider-nestjs/src/semantic/guard-source.ts` *(reduced to re-export for E6 backward-compat)*
+- `packages/provider-nestjs/src/semantic/index.ts` *(barrel updated)*
+- `packages/provider-nestjs/src/metadata/ControllerMetadata.ts` *(extended — added `classPipes`, `classInterceptors`, `classFilters`)*
+- `packages/provider-nestjs/src/metadata/RouteMetadata.ts` *(extended — added `pipes`, `interceptors`, `filters`)*
+- `packages/provider-nestjs/src/analyzer/ControllerAnalyzer.ts` *(extended — populates the 3 new class-scope fields)*
+- `packages/provider-nestjs/src/analyzer/RouteAnalyzer.ts` *(extended — populates the 3 new method-scope fields)*
+- `packages/provider-nestjs/test/pipe-interceptor-filter-semantic.test.ts` *(new)*
+- `package.json` *(+1 line: `test:nest:pif`)*
+
+### Objective
+Per E0.11: same pattern as E6 (Guards) for the other three decorator
+families — `@UsePipes`, `@UseInterceptors`, `@UseFilters`. Preserve
+expressions + resolve identifiers via SymbolResolver +
+DeclarationResolver. Never invoke pipes / interceptors / filters /
+factories / constructors.
+
+### Existing implementation found
+- `GuardSourceExtractor` (E6) was hard-coded to the decorator name
+  `"UseGuards"`. To support the other three decorator families
+  without duplicating logic, the extractor was generalized into
+  `DecoratorArgExtractor(decoratorName)`.
+- `GuardSourceView` was kept as a type alias for E6 backward-compat.
+- `SymbolResolver` + `DeclarationResolver` (provider-ast) and
+  `ExpressionInspector` (provider-ast) already exist and are reused.
+
+### Architecture inspected
+- `packages/provider-nestjs/src/semantic/guard-source.ts` (E6 source)
+- `packages/provider-ast/src/compiler/SymbolResolver.ts`
+- `packages/provider-ast/src/compiler/DeclarationResolver.ts`
+- `packages/provider-ast/src/expression/ExpressionInspector.ts`
+- `packages/provider-nestjs/src/metadata/{Controller,Route}Metadata.ts`
+- E6 architecture + `decorator-arg.ts` design
+
+### Files changed (production)
+- **`DecoratorArgView`** *(new shared interface in
+  `decorator-arg.ts`)*: structural + semantic view of a single
+  decorator argument. Fields: `kindName`, `sourceText`, `isStatic`,
+  `resolvedSymbolName`, `resolvedDeclarationKind`, `className`,
+  `children`. NEVER invokes guards / pipes / interceptors / filters.
+- **`DecoratorArgExtractor(decoratorName)`** *(new shared
+  extractor in `decorator-arg.ts`)*: generic extractor that takes the
+  decorator name as a constructor parameter. Uses `findAll` (via the
+  user/linter fix) so multiple decorators of the same family on a
+  single node are correctly combined.
+- **Semantic-name subclasses** *(new, in `decorator-arg.ts`)*:
+  - `GuardSourceExtractor` extends `DecoratorArgExtractor` with
+    `decoratorName = "UseGuards"` — preserves E6 backward-compat.
+  - `PipeSourceExtractor` extends `DecoratorArgExtractor` with
+    `decoratorName = "UsePipes"` (E7).
+  - `InterceptorSourceExtractor` extends `DecoratorArgExtractor`
+    with `decoratorName = "UseInterceptors"` (E7).
+  - `FilterSourceExtractor` extends `DecoratorArgExtractor` with
+    `decoratorName = "UseFilters"` (E7).
+- **Semantic-name type aliases** *(new, in `decorator-arg.ts`)*:
+  - `PipeSourceView = DecoratorArgView`
+  - `InterceptorSourceView = DecoratorArgView`
+  - `FilterSourceView = DecoratorArgView`
+  - `GuardSourceView = DecoratorArgView` (preserved for E6 backward-compat)
+  These alias the same shape but give each family an explicit,
+  correctly-named semantic name.
+- **`ControllerMetadata`** *(extended)*:
+  - `classPipes: readonly PipeSourceView[]`
+  - `classInterceptors: readonly InterceptorSourceView[]`
+  - `classFilters: readonly FilterSourceView[]`
+- **`RouteMetadata`** *(extended)*:
+  - `pipes: readonly PipeSourceView[]`
+  - `interceptors: readonly InterceptorSourceView[]`
+  - `filters: readonly FilterSourceView[]`
+- **`ControllerAnalyzer`** *(extended)* — instantiates `PipeSource`,
+  `InterceptorSource`, `FilterSource` extractors; populates the
+  three new class-scope fields per controller.
+- **`RouteAnalyzer`** *(extended)* — instantiates the three new
+  extractors; populates the three new method-scope fields per route.
+- **`guard-source.ts`** *(reduced)* — now just re-exports from
+  `decorator-arg.ts` for E6 backward-compat.
+
+### Implementation reasoning
+- **Reuse discipline:** No new `TypeChecker` / `TypeResolver` /
+  `SymbolResolver` / `DeclarationResolver`. The generic
+  `DecoratorArgExtractor` composes the existing primitives. The
+  semantic-name subclasses are 5-line `super("UsePipes", ...)`
+  wrappers.
+- **Hard boundary:** `provider-ast` was NOT touched in E7.
+- **No invocation:** pipes / interceptors / filters are NEVER
+  constructed or invoked. Only the AST is read.
+- **Source preservation:** every `sourceText` is `arg.getText()`.
+- **Static vs dynamic:** only bare identifier guards/pipes/etc. are
+  `isStatic=true`. Calls, arrays, objects are always `isStatic=false`.
+- **Multiple decorators of the same family:** the user/linter
+  upgrade to `findAll(node, name)` ensures that
+  `@UseGuards(A) @UseGuards(B)` produces 2 view records (not 1).
+- **Naming:** semantic models are explicit and correctly named
+  (`classPipes` / `pipes` / etc.) per the user instruction. The view
+  type itself is shared to avoid duplicating identical shape logic.
+
+### Exact command
+```bash
+pnpm test:nest:pif
+# or directly (from repo root):
+tsx packages/provider-nestjs/test/pipe-interceptor-filter-semantic.test.ts
+```
+
+### MATCH OUTPUT
+
+```
+===== E7 — PIPES / INTERCEPTORS / FILTERS =====
+
+--- Part A: synthetic (all three decorators) ---
+  m2[0] pipes        src="ValidationPipe"                              kind=identifier static=true  children=0 PASS
+  m3[0] pipes        src="ValidationPipe({ transform: true })"           kind=call       static=false children=0 PASS
+  m4[0] pipes        src="[ValidationPipe, ValidationPipe]"            kind=array      static=false children=2 PASS
+  m5[0] pipes        src="{ provide: ValidationPipe, useClass: ValidationPipe }" kind=object static=false children=0 PASS
+  m6[0] interceptors src="LoggingInterceptor"                          kind=identifier static=true  children=0 PASS
+  m7[0] filters      src="ExceptionFilter"                            kind=identifier static=true  children=0 PASS
+  ControllerB class pipes=1 interceptors=1 filters=1 PASS
+  Summary: 9/9
+
+--- Part B: synthetic with resolvers ---
+  Summary: 4/4
+
+--- Part C: example-api scan ---
+  Summary: 7/7 example-api controllers with no pipes/interceptors/filters
+```
+
+### Verification matrix
+
+| E7 requirement | Expected | Actual | Status |
+|---|---|---|---|
+| `@UsePipes(ValidationPipe)` | `kind=identifier, isStatic=true` | matches | **PASS** |
+| `@UsePipes(ValidationPipe({ transform: true }))` | `kind=call, isStatic=false` | matches | **PASS** |
+| `@UsePipes([ValidationPipe, ValidationPipe])` | `kind=array, children=2` | matches | **PASS** |
+| `@UsePipes({ provide, useClass })` | `kind=object, isStatic=false` | matches | **PASS** |
+| `@UseInterceptors(LoggingInterceptor)` | `kind=identifier` | matches | **PASS** |
+| `@UseFilters(ExceptionFilter)` | `kind=identifier` | matches | **PASS** |
+| Class-scope `@UsePipes` (metadata field `classPipes`) | populated | matches | **PASS** |
+| Method-scope `pipes` / `interceptors` / `filters` | populated per route | matches | **PASS** |
+| No second TypeChecker / TypeResolver / SymbolResolver | confirmed (composition only) | confirmed | **PASS** |
+| No pipe / interceptor / filter instantiation | confirmed (zero execution) | confirmed | **PASS** |
+| Source text preserved verbatim | every `sourceText` matches `arg.getText()` | matches | **PASS** |
+| Multiple decorators of same family handled | `findAll` returns all | confirmed | **PASS** |
+| `GuardSourceView` still works for E6 | backward-compat re-export | confirmed | **PASS** |
+
+### Regression result: **PASS**
+- `controller-semantic.test.ts` (E1) — exit 0, 25 lines.
+- `route-semantic.test.ts` (E2) — exit 0, 68 lines.
+- `route-composition-semantic.test.ts` (E3) — exit 0, 76 lines.
+- `parameter-semantic.test.ts` (E4) — exit 0, 56 lines.
+- `type-semantic.test.ts` (E5) — exit 0, 35 lines.
+- `guard-semantic.test.ts` (E6) — exit 0, 21 lines (after the
+  `findAll` upgrade from the user/linter).
+- `pipe-interceptor-filter-semantic.test.ts` (E7) — exit 0, 17 lines.
+- Typecheck `provider-ast`: exit 0.
+- Typecheck `provider-nestjs`: exit 0.
+
+### Architecture decisions
+- **Reuse discipline:** No new `TypeChecker` / `TypeResolver` /
+  `SymbolResolver` / `DeclarationResolver`. The new
+  `DecoratorArgExtractor` composes existing primitives; the
+  semantic-name subclasses are thin `super(name, ...)` wrappers.
+- **Hard boundary:** `provider-ast` was NOT touched in E7.
+- **No invocation:** pipes / interceptors / filters are NEVER
+  invoked.
+- **Naming:** semantic models are explicit and correctly named
+  (`classPipes` / `classInterceptors` / `classFilters` /
+  `pipes` / `interceptors` / `filters`) per the user instruction.
+
+### Known gaps (deferred)
+- `@UseGuards` / `@UsePipes` etc. on individual parameters — not
+  the common NestJS pattern; structural support deferred.
+- Wildcard / dynamically-generated pipe / interceptor lists — same
+  pattern as guards (preserved as `kindName="array" / "object"` with
+  `isStatic=false`).
+- `@UseGuards` / `@UsePipes` etc. with **method-level** priority
+  combinations — left for E10 (unified semantic model) where policy
+  can be finalized.
+
+### Commit
+- `feat(provider-nestjs): extract pipes, interceptors, and filters`
+
+---
+
+End of E7.

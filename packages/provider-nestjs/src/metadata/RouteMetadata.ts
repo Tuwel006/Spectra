@@ -1,6 +1,11 @@
 import ts from "typescript";
 import { HttpMethod } from "@spectra/core";
-import { GuardSourceView } from "../semantic/guard-source";
+import {
+    FilterSourceView,
+    GuardSourceView,
+    InterceptorSourceView,
+    PipeSourceView,
+} from "../semantic/decorator-arg";
 import { ParameterTypeView } from "../semantic/parameter-type";
 
 export interface RouteMetadata {
@@ -65,6 +70,15 @@ export interface RouteMetadata {
      * `GuardSourceView` shape as `ControllerMetadata.classGuards`.
      */
     readonly guards: readonly GuardSourceView[];
+
+    /** Method-scope @UsePipes arguments (added in E7). */
+    readonly pipes: readonly PipeSourceView[];
+
+    /** Method-scope @UseInterceptors arguments (added in E7). */
+    readonly interceptors: readonly InterceptorSourceView[];
+
+    /** Method-scope @UseFilters arguments (added in E7). */
+    readonly filters: readonly FilterSourceView[];
 
     readonly methodNode: ts.MethodDeclaration;
 

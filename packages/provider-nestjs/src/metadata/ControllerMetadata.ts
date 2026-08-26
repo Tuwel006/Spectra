@@ -1,5 +1,10 @@
 import ts from "typescript";
-import { GuardSourceView } from "../semantic/guard-source";
+import {
+    FilterSourceView,
+    GuardSourceView,
+    InterceptorSourceView,
+    PipeSourceView,
+} from "../semantic/decorator-arg";
 import { RouteMetadata } from "./RouteMetadata";
 
 export interface ControllerMetadata {
@@ -41,6 +46,15 @@ export interface ControllerMetadata {
      * symbol / declaration information. Guards are NEVER invoked.
      */
     readonly classGuards: readonly GuardSourceView[];
+
+    /** Class-scope @UsePipes arguments (added in E7). Same view shape. */
+    readonly classPipes: readonly PipeSourceView[];
+
+    /** Class-scope @UseInterceptors arguments (added in E7). */
+    readonly classInterceptors: readonly InterceptorSourceView[];
+
+    /** Class-scope @UseFilters arguments (added in E7). */
+    readonly classFilters: readonly FilterSourceView[];
 
     readonly routes: readonly RouteMetadata[];
 
