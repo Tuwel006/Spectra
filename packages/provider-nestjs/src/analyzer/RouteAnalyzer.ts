@@ -7,6 +7,7 @@ import {
     MethodQuery,
     NodeWalker,
     ParameterQuery,
+    TypeResolver,
 } from "@spectra/provider-ast";
 
 import { ControllerMetadata, RouteMetadata } from "../metadata";
@@ -14,6 +15,7 @@ import { composeRoutePath } from "../semantic/route-composition";
 import { RouteMethodExtractor } from "../semantic/route-method";
 import { RoutePathExtractor } from "../semantic/route-path";
 import { ParameterSourceExtractor } from "../semantic/parameter-source";
+import { ParameterTypeExtractor } from "../semantic/parameter-type";
 
 export class RouteAnalyzer {
 
@@ -26,6 +28,7 @@ export class RouteAnalyzer {
         decoratorReader: DecoratorReader,
         decoratorArguments?: DecoratorArguments,
         inspector?: ExpressionInspector,
+        typeResolver?: TypeResolver,
         methodExtractor?: RouteMethodExtractor,
         parameterExtractor?: ParameterSourceExtractor,
     ) {
@@ -47,10 +50,15 @@ export class RouteAnalyzer {
                 decoratorReader,
                 _decoratorArguments,
                 _inspector,
+                new ParameterTypeExtractor(typeResolver),
             );
         this.parameterQuery = new ParameterQuery(
             new NodeWalker(),
         );
+        // The methodQuery is used by RouteAnalyzer.analyze(); the
+        // parameterQuery shares a fresh stateless NodeWalker since
+        // NodeQuery.execute only needs the walker for the
+        // recursive-walk path (which we override for direct params).
     }
 
     public analyze(

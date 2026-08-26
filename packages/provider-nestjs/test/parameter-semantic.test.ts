@@ -17,6 +17,7 @@ import {
     DecoratorArguments,
     DecoratorReader,
     ParameterSourceExtractor,
+    ParameterTypeExtractor,
     RouteAnalyzer,
 } from "../src";
 
@@ -71,6 +72,7 @@ const parameterExtractor = new ParameterSourceExtractor(
     decoratorReader,
     decoratorArguments,
     inspector,
+    new ParameterTypeExtractor(),
 );
 
 const controllerAnalyzer = new ControllerAnalyzer(

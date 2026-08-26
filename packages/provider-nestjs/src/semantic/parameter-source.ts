@@ -2,19 +2,18 @@ import ts from "typescript";
 import { ExpressionInspector } from "@spectra/provider-ast";
 
 import { ParameterMetadata } from "../metadata";
+import { ParameterTypeExtractor } from "./parameter-type";
 import { DecoratorArguments, DecoratorReader } from "../utils";
 
 /**
- * Per-parameter semantic extractor (E4).
+ * Per-parameter semantic extractor (E4 + E5).
  *
- * Reads a single `ts.ParameterDeclaration` and produces a
- * `ParameterMetadata` view that preserves:
- *   - parameter name (TypeScript identifier text)
- *   - parameter decorator source (e.g. "Param", "Query", "Body") when
- *     present (undefined otherwise)
- *   - key argument: raw source text + ExpressionInspector
- *     classification + string-literal value (when applicable)
- *   - parameter type source text
+ * E4: reads a `ts.ParameterDeclaration` and produces a
+ * `ParameterMetadata` view that preserves name, decorator, key
+ * argument, and parameter type source text.
+ *
+ * E5: also extracts resolved type semantics via the existing
+ * provider-ast TypeResolver (no second TypeChecker abstraction).
  *
  * Never evaluates user code. Never coerces a non-string-literal
  * key expression into a guessed string.
@@ -23,15 +22,18 @@ export class ParameterSourceExtractor {
     private readonly decoratorReader: DecoratorReader;
     private readonly decoratorArguments: DecoratorArguments;
     private readonly inspector: ExpressionInspector;
+    private readonly typeExtractor: ParameterTypeExtractor;
 
     public constructor(
         decoratorReader: DecoratorReader,
         decoratorArguments: DecoratorArguments,
         inspector: ExpressionInspector,
+        typeExtractor: ParameterTypeExtractor,
     ) {
         this.decoratorReader = decoratorReader;
         this.decoratorArguments = decoratorArguments;
         this.inspector = inspector;
+        this.typeExtractor = typeExtractor;
     }
 
     public extract(
@@ -42,9 +44,6 @@ export class ParameterSourceExtractor {
         const decorators = this.decoratorReader.getDecorators(parameter);
         const hasDecorator = decorators.length > 0;
 
-        // E4 scope: single decorator per parameter is the common
-        // NestJS pattern. The first decorator's name + first-arg
-        // (key) are recorded.
         let decoratorName: string | undefined;
         let decoratorIndex = -1;
         let keySourceText: string | undefined;
@@ -71,7 +70,8 @@ export class ParameterSourceExtractor {
             break;
         }
 
-        const typeText = parameter.type?.getText() ?? "";
+        const type = this.typeExtractor.extract(parameter.type);
+        const typeText = type.sourceText;
 
         return {
             parameterIndex,
@@ -83,6 +83,7 @@ export class ParameterSourceExtractor {
             key,
             keyIsStatic,
             typeText,
+            type,
             hasDecorator,
         };
     }

@@ -1,5 +1,6 @@
 import ts from "typescript";
 import { HttpMethod } from "@spectra/core";
+import { ParameterTypeView } from "../semantic/parameter-type";
 
 export interface RouteMetadata {
 
@@ -110,6 +111,15 @@ export interface ParameterMetadata {
 
     /** Parameter type's source text (e.g. "string", "number", "CreateUserDto"). */
     readonly typeText: string;
+
+    /**
+     * Resolved type semantics (added in E5). Reuses provider-ast's
+     * TypeResolver — no second TypeChecker abstraction. Preserves the
+     * original source text in `type.sourceText` while surfacing the
+     * kind classification, symbol, declaration kind, array / union
+     * structure, etc.
+     */
+    readonly type: ParameterTypeView;
 
     /** Whether the parameter has any decorator. */
     readonly hasDecorator: boolean;

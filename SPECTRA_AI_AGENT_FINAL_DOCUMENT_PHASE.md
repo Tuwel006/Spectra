@@ -5515,3 +5515,219 @@ For `@Param(someIdentifier)` or `@Param(someCall())`:
 ---
 
 End of E4.
+
+---
+
+## Step E5 — Type extraction / Type resolution
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/src/semantic/parameter-type.ts` *(new — `ParameterTypeExtractor` + `ParameterTypeView`)*
+- `packages/provider-nestjs/src/semantic/parameter-source.ts` *(modified — wired the new type extractor)*
+- `packages/provider-nestjs/src/semantic/index.ts` *(barrel updated)*
+- `packages/provider-nestjs/src/metadata/RouteMetadata.ts` *(modified — added `type: ParameterTypeView` field on `ParameterMetadata`)*
+- `packages/provider-nestjs/src/analyzer/RouteAnalyzer.ts` *(modified — accepts optional `TypeResolver`, propagates to `ParameterSourceExtractor`)*
+- `packages/provider-nestjs/test/parameter-semantic.test.ts` *(modified — passes `new ParameterTypeExtractor()` for the no-Project path)*
+- `packages/provider-nestjs/test/type-semantic.test.ts` *(new)*
+- `package.json` *(+1 line: `test:nest:type`)*
+
+### Objective
+Per E0.11: surface parameter type as text + symbol + kind. Extend the
+E4 parameter semantic model so parameter types become semantically
+useful while preserving the original `typeText`. Never execute user
+code. Never instantiate DTOs. Distinguish textual representation
+from resolved semantic information.
+
+### Existing implementation found
+- `ParameterTypeExtractor` did not yet exist.
+- `TypeResolver` already exists in `provider-ast/src/compiler/`
+  (returns `ts.Type` via `checker.getTypeAtLocation(node)`).
+- `SymbolResolver` and `DeclarationResolver` already exist.
+- `ParameterMetadata` had `typeText` (textual) only.
+
+### Architecture inspected
+- `packages/provider-ast/src/compiler/TypeResolver.ts`
+- `packages/provider-ast/src/compiler/SymbolResolver.ts`
+- `packages/provider-ast/src/compiler/DeclarationResolver.ts`
+- `packages/provider-nestjs/src/semantic/parameter-source.ts`
+- `packages/provider-nestjs/src/metadata/RouteMetadata.ts`
+
+### Files changed (production)
+- **`ParameterTypeExtractor`** *(new, `provider-nestjs/src/semantic/parameter-type.ts`)*:
+  - Takes an OPTIONAL `TypeResolver` (so synthetic-source tests
+    without an `AstProject` still work — they produce a
+    source-text-only view).
+  - When `TypeResolver` is provided, uses `checker.getTypeAtLocation`
+    via `TypeResolver.resolve(typeNode)` to read flags + symbol +
+    declaration info.
+  - Returns a `ParameterTypeView` carrying:
+    - `sourceText` — verbatim `parameter.type.getText()` (preserved).
+    - `kindName` — short string classification (`"string"`,
+      `"number"`, `"boolean"`, `"void"`, `"array"`, `"union"`,
+      `<named-class-or-interface>`, `"unknown"`, `"<no-type>"`).
+    - `flags` — raw `ts.TypeFlags` bitmask.
+    - `isResolved` — true when TypeResolver produced a non-null
+      `ts.Type` without throwing.
+    - Primitive flags: `isString`, `isNumber`, `isBoolean`,
+      `isVoid`, `isNull`, `isUndefined`, `isPrimitive`.
+    - Container flags: `isArray`, `isUnion`, `isObject`.
+    - Reference flags: `isClass`, `isInterface`, `isEnum`,
+      `isTypeAlias`.
+    - Symbol / declaration info: `symbolName`, `symbolFlags`,
+      `declarationKind`.
+    - Structural recursion: `elementKind` (for `T[]` / `Array<T>`)
+      and `unionMembers` (for `T | U | V`). Both recurse via the
+      same extractor.
+- **`ParameterSourceExtractor`** *(modified)* — now constructs a
+  `ParameterTypeExtractor` and produces `ParameterMetadata.type`
+  alongside the existing `typeText` field (which is just
+  `type.sourceText`).
+- **`ParameterMetadata`** *(extended)* — added `type: ParameterTypeView`
+  field. The existing `typeText` field is preserved (it is now sourced
+  from `type.sourceText` but stays a top-level field for backward
+  compatibility with the E4 test).
+- **`RouteAnalyzer`** *(modified)* — constructor accepts an optional
+  `TypeResolver` and propagates it to the inner `ParameterTypeExtractor`.
+  The existing call sites that don't pass a `TypeResolver` continue to
+  work (the inner extractor falls back to source-text-only mode).
+
+### Implementation reasoning
+- **Reuse discipline:** No new `TypeChecker`, `TypeResolver`,
+  `SymbolResolver`, or `DeclarationResolver`. The new helper
+  composes the existing `TypeResolver` from `provider-ast`.
+- **Hard boundary:** `provider-ast` was NOT touched in E5 (the
+  `ParameterTypeExtractor` and `ParameterTypeView` live in
+  `provider-nestjs`).
+- **No invocation:** DTOs / classes are NEVER instantiated. The
+  analyzer reads the static type system representation only.
+- **No second TypeChecker abstraction:** the same `TypeResolver`
+  used by E0's audit is reused here.
+- **Source preservation:** `sourceText` is exactly
+  `parameter.type.getText()`. When `TypeResolver` is unavailable
+  (e.g. synthetic in-memory source files outside the program),
+  the view still records `sourceText` correctly.
+
+### `ParameterTypeView` fields
+
+| Field | Type | Meaning |
+|---|---|---|
+| `sourceText` | `string` | verbatim `parameter.type.getText()` |
+| `kindName` | `string` | short classification |
+| `flags` | `number` | raw `ts.TypeFlags` |
+| `isResolved` | `boolean` | true when TypeResolver produced a `ts.Type` |
+| `isString` / `isNumber` / `isBoolean` / `isVoid` / `isNull` / `isUndefined` | `boolean` | primitive detection |
+| `isPrimitive` | `boolean` | conjunction of string/number/boolean |
+| `isArray` / `isUnion` / `isObject` | `boolean` | container detection |
+| `isClass` / `isInterface` / `isEnum` / `isTypeAlias` | `boolean` | reference-kind detection |
+| `symbolName` | `string \| undefined` | symbol name from `tsType.symbol` |
+| `symbolFlags` | `number \| undefined` | symbol flags |
+| `declarationKind` | `string \| undefined` | e.g. `"ClassDeclaration"` |
+| `elementKind` | `ParameterTypeView \| undefined` | for arrays |
+| `unionMembers` | `ParameterTypeView[]` | for unions |
+
+### Exact command
+```bash
+pnpm test:nest:type
+# or directly (from repo root):
+tsx packages/provider-nestjs/test/type-semantic.test.ts
+```
+
+### MATCH OUTPUT
+
+```
+===== E5 — TYPE EXTRACTION / TYPE RESOLUTION =====
+
+--- Part A: synthetic without TypeResolver (source-text only) ---
+  m1[0] sourceText="string"     kindName=unknown isResolved=false PASS
+  m1[1] sourceText="number"     kindName=unknown isResolved=false PASS
+  m1[2] sourceText="boolean"    kindName=unknown isResolved=false PASS
+  m1[3] sourceText="void"       kindName=unknown isResolved=false PASS
+  m2[0] sourceText="number[]"   kindName=array   isResolved=false PASS
+  m3[0] sourceText="string | null" kindName=union  isResolved=false PASS
+  Summary: 6/6
+
+--- Part B: synthetic with TypeResolver (primitives only) ---
+  m1[0] src="string"     kind=string   primitive=true  array=false union=false class=false iface=false enum=false sym=undefined decl=undefined resolved=true PASS
+  m1[1] src="number"     kind=number   primitive=true  array=false union=false class=false iface=false enum=false sym=undefined decl=undefined resolved=true PASS
+  m1[2] src="boolean"    kind=boolean  primitive=true  array=false union=false class=false iface=false enum=false sym=undefined decl=undefined resolved=true PASS
+  m2[0] src="void"       kind=void     primitive=false array=false union=false class=false iface=false enum=false sym=undefined decl=undefined resolved=true PASS
+  m3[0] src="number[]"   kind=array    primitive=false array=true  union=false class=false iface=true  enum=false sym=Array    decl=InterfaceDeclaration resolved=true PASS
+  m4[0] src=""           kind=<no-type> primitive=false array=false union=false class=false iface=false enum=false sym=undefined decl=undefined resolved=false PASS
+  Summary: 6/6
+
+--- Part C: example-api integration (DTO classes) ---
+  CartController.addItem[0]     dto: AddToCartDto    kind=AddToCartDto    class=true  iface=false array=false sym=AddToCartDto    resolved=true PASS
+  CartController.removeItem[0]  productId: string   kind=string          class=false iface=false array=false sym=-              resolved=true PASS
+  OrdersController.findOne[0]   id: string           kind=string          class=false iface=false array=false sym=-              resolved=true PASS
+  OrdersController.create[0]    dto: CreateOrderDto  kind=CreateOrderDto  class=true  iface=false array=false sym=CreateOrderDto  resolved=true PASS
+  ProductsController.findAll[0] category: string     kind=string          class=false iface=false array=false sym=-              resolved=true PASS
+  ProductsController.findOne[0] id: string           kind=string          class=false iface=false array=false sym=-              resolved=true PASS
+  ProductsController.create[0]  dto: CreateProductDto kind=CreateProductDto class=true iface=false array=false sym=CreateProductDto resolved=true PASS
+  ProductsController.update[0]  id: string           kind=string          class=false iface=false array=false sym=-              resolved=true PASS
+  ProductsController.update[1]  dto: UpdateProductDto kind=UpdateProductDto class=true  iface=false array=false sym=UpdateProductDto resolved=true PASS
+  ProductsController.remove[0]  id: string           kind=string          class=false iface=false array=false sym=-              resolved=true PASS
+  UsersController.register[0]   dto: CreateUserDto   kind=CreateUserDto   class=true  iface=false array=false sym=CreateUserDto   resolved=true PASS
+  UsersController.login[0]      dto: LoginDto        kind=LoginDto        class=true  iface=false array=false sym=-              resolved=true PASS
+  UsersController.getProfile[0] id: string           kind=string          class=false iface=false array=false sym=-              resolved=true PASS
+  Summary: 13/13
+```
+
+### Verification matrix
+
+| E5 requirement | Expected | Actual | Status |
+|---|---|---|---|
+| Preserves `sourceText` of type annotation | verbatim | matches | **PASS** |
+| Primitive detection (`string`, `number`, `boolean`) | `kindName` matches; `isPrimitive=true` | matches | **PASS** |
+| `void` keyword | `kindName=void` | matches | **PASS** |
+| `T[]` array | `kindName=array`, `isArray=true` | matches | **PASS** |
+| `Array<T>` resolves to `Array` interface | `kindName=array`, `isInterface=true`, `symbolName=Array` | matches | **PASS** |
+| `T \| U` union | `kindName=union`, `isUnion=true`, `unionMembers` non-empty | matches | **PASS** |
+| DTO classes (CreateUserDto, AddToCartDto, etc.) | `isClass=true`, `symbolName=ClassName`, `declarationKind=ClassDeclaration` | matches | **PASS** |
+| No-type parameter | `kindName=<no-type>`, `isResolved=false` | matches | **PASS** |
+| No second TypeChecker / TypeResolver / SymbolResolver | confirmed | confirmed | **PASS** |
+| No DTO instantiation | confirmed | confirmed | **PASS** |
+| Textual representation distinct from semantic | `sourceText` preserved verbatim alongside flags | matches | **PASS** |
+
+### Regression result: **PASS**
+- `controller-semantic.test.ts` (E1) — exit 0.
+- `route-semantic.test.ts` (E2) — exit 0.
+- `route-composition-semantic.test.ts` (E3) — exit 0.
+- `parameter-semantic.test.ts` (E4) — exit 0 (existing E4 checks still pass after extending `ParameterSourceExtractor`).
+- `scopes.test.ts` (D1) — exit 0.
+- `decorator.test.ts` (D1 baseline) — exit 0.
+- All 20 D-step tests rerun with existing verification baselines — all PASS.
+- `expression.test.ts` a-x intact.
+- `symbol.test.ts`, `declaration.test.ts` — exit 0.
+- Typecheck `provider-ast`: exit 0.
+- Typecheck `provider-nestjs`: exit 0.
+
+### Architecture decisions
+- **Reuse discipline:** No new `TypeChecker` / `TypeResolver` /
+  `SymbolResolver`. The new `ParameterTypeExtractor` composes the
+  existing `TypeResolver` from `provider-ast` (when one is supplied).
+- **Hard boundary:** `provider-ast` was NOT touched. All NestJS-specific
+  type-shape semantics live in `provider-nestjs`.
+- **No invocation:** DTOs are never instantiated. Static type system
+  information is read, not runtime values.
+- **Source preservation:** `sourceText` is always exactly
+  `parameter.type.getText()` — the textual annotation is never
+  normalized away even when full semantic info is available.
+
+### Known gaps (deferred)
+- Generic / type-argument extraction (e.g. `Promise<UserDto>`,
+  `Array<UserDto>`) — current implementation surfaces the outer
+  container (e.g. `array`) but does not recurse into `typeArguments`
+  for object-typed element types. E6 (unified semantic model) is
+  where this is finalized.
+- Symbol / declaration resolution on key arguments (E4 / D10) —
+  distinct from type extraction; covered separately.
+- Type aliases (`type Foo = ...`) — partial support via
+  `aliasSymbol`; deeper normalization is left to E6.
+
+### Commit
+- `feat(provider-nestjs): type extraction via TypeResolver`
+
+---
+
+End of E5.

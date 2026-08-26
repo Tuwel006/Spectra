@@ -4,3 +4,4 @@ export * from "./route-method";
 export * from "./route-composition";
 export * from "./route-composition-extractor";
 export * from "./parameter-source";
+export * from "./parameter-type";
