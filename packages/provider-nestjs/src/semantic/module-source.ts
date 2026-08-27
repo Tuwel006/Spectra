@@ -142,7 +142,20 @@ export class ModuleSourceExtractor {
         const modules: ModuleMetadata[] = [];
         for (const sf of sourceFiles) {
             for (const cls of classQuery(sf)) {
-                modules.push(this.extract(cls));
+                const m = this.extract(cls);
+                // Skip classes without a meaningful @Module decorator
+                // (i.e. no decorators parsed). An empty extract() output
+                // would otherwise pollute the unified model with bare
+                // class declarations.
+                if (
+                    m.imports.length === 0 &&
+                    m.controllers.length === 0 &&
+                    m.providers.length === 0 &&
+                    m.exports.length === 0
+                ) {
+                    continue;
+                }
+                modules.push(m);
             }
         }
         const edges: ModuleImportEdge[] = [];
@@ -150,7 +163,8 @@ export class ModuleSourceExtractor {
             for (const item of m.imports) {
                 edges.push({
                     fromModuleName: m.name,
-                    toModuleName: item.className ?? item.resolvedSymbolName,
+                    toModuleName:
+                        item.className ?? item.resolvedSymbolName,
                     item,
                 });
             }
@@ -287,9 +301,6 @@ export class ModuleSourceExtractor {
         expr: ts.ObjectLiteralExpression,
         sourceText: string,
     ): ModuleItemView {
-        // Detect known provider forms: provide/useClass/useValue/
-        // useFactory/useExisting. Surface as children for downstream
-        // consumers (e.g. E10).
         let providerForm: string | undefined;
         for (const p of expr.properties) {
             if (ts.isPropertyAssignment(p)) {
@@ -336,15 +347,36 @@ export class ModuleSourceExtractor {
     private safeResolveClass(node: ts.Node): ts.ClassDeclaration | undefined {
         if (!this.declarationResolver) return undefined;
         try {
-            return this.declarationResolver.resolveClass(node);
+            const direct = this.declarationResolver.resolveClass(node);
+            if (direct) return direct;
         } catch {
             return undefined;
         }
-        // Imported symbols do not directly resolve to a ClassDeclaration
-        // through the SymbolResolver API. We intentionally do NOT chase
-        // import aliases here — `resolvedSymbolName` (captured
-        // separately from the import binding) already records the
-        // imported class name for downstream consumers.
+        // Try import-alias follow-through for completeness (the
+        // symbol is shared with module-source but the import-alias
+        // walk below uses parent.parent.parent which may not always
+        // be the import declaration's source file).
+        try {
+            const decls = this.safeResolveDeclarations(node);
+            const first = decls[0];
+            if (
+                first &&
+                ts.isImportSpecifier(first) &&
+                this.symbolResolver
+            ) {
+                const aliasedSymbol =
+                    this.safeResolveSymbol((first as ts.ImportSpecifier)
+                        .parent.parent.parent);
+                if (aliasedSymbol) {
+                    return this.declarationResolver.resolveClass(
+                        aliasedSymbol.declarations?.[0] ?? node,
+                    );
+                }
+            }
+        } catch {
+            return undefined;
+        }
+        return undefined;
     }
 
     private make(
