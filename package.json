@@ -49,6 +49,7 @@
     "test:nest:http": "tsx packages/provider-nestjs/test/http-metadata-semantic.test.ts",
     "test:nest:module": "tsx packages/provider-nestjs/test/module-semantic.test.ts",
     "test:nest:unified": "tsx packages/provider-nestjs/test/unified-semantic-model.test.ts",
+    "test:nest:g0-config": "tsx packages/provider-nestjs/test/g0-config.test.ts",
     "test:ast:expression": "tsx packages/provider-ast/test/expression.test.ts",
     "test:nest:symbol": "tsx packages/provider-nestjs/test/symbol.test.ts",
     "test:nest:declaration": "tsx packages/provider-nestjs/test/declaration.test.ts",

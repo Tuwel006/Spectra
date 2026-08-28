@@ -6801,3 +6801,214 @@ tsx packages/provider-nestjs/test/unified-semantic-model.test.ts
 ---
 
 End of E10.
+
+---
+
+## Step G0 — Configuration loading foundation
+
+Status: [x]
+
+Files:
+- `packages/provider-nestjs/src/config/SpectraConfig.ts` *(new — `SpectraConfig`, `SpectraUserConfig`, `SpectraConfigLoader`, `SpectraConfigError`, `SpectraOutputFormat`)*
+- `packages/provider-nestjs/src/index.ts` *(barrel — added `export * from "./config/SpectraConfig"`)*
+- `packages/provider-nestjs/test/g0-config.test.ts` *(new — 23 assertions across 9 cases)*
+- `package.json` *(added `"test:nest:g0-config": "tsx packages/provider-nestjs/test/g0-config.test.ts"`)*
+
+### Objective
+Per the post-E10 audit, build the minimum configuration-loading
+foundation required by the future `spectra generate` command. The
+configuration must:
+
+- Have safe defaults so zero-config runs as much as possible.
+- Accept an optional `spectra.config.json` for explicit overrides.
+- Read `package.json` for fallback `name` / `version` / `description`.
+- Validate every field and surface clear errors on invalid input.
+- Never invent information that is not present in the source.
+
+### Existing implementation found
+- `packages/cli/` — empty placeholder (only `.gitkeep`).
+- `packages/config/` — empty placeholder (only `.gitkeep`).
+- `packages/provider-openapi/` — empty placeholder.
+- `packages/provider-runtime/` — empty placeholder.
+- `packages/shared/` — empty placeholder.
+- `packages/ui/` — empty placeholder.
+- `packages/core/` — `Documentation` model already built (audit in
+  previous round).
+- `packages/provider-ast/` — NestJS-agnostic AST + symbol + type +
+  declaration resolvers.
+- `packages/provider-nestjs/` — E0–E10 already in place.
+
+### Architecture inspected
+- `packages/provider-nestjs/src/index.ts`
+- `packages/provider-nestjs/package.json` (existing dependencies:
+  `@spectra/core`, `@spectra/provider-ast`, dev: `tsx`)
+- `package.json` (root)
+- `tsconfig.json` in `provider-nestjs`
+
+### Files changed (production)
+- **`SpectraConfig.ts`** *(new, in `packages/provider-nestjs/src/config/`)*:
+  - `SpectraOutputFormat` — union `"json"` (only supported value
+    for now; future formats can extend the union).
+  - `SpectraInfoConfig`, `SpectraServerConfig`,
+    `SpectraOutputConfig`, `SpectraUserConfig` — raw input
+    shape for `spectra.config.json`. Every field is optional.
+  - `SpectraConfig` — **immutable**, **fully-merged** shape with
+    required defaults applied. Every field here is non-optional.
+  - `SpectraConfigError` — thrown on invalid input.
+  - `SpectraConfigLoader.load(overrideRoot?)`:
+    1. Resolves `projectRoot` (override > `process.cwd()`); throws
+       `SpectraConfigError` if missing or not a directory.
+    2. Reads `<projectRoot>/spectra.config.json` if present.
+       Validates every field. Throws on invalid input.
+    3. Reads `<projectRoot>/package.json` if present; takes
+       `name` / `version` / `description` only if they are strings.
+    4. Applies safe defaults for anything still missing.
+- All file reading is via Node's `readFileSync` — **no application
+  code execution**, **no DTO / class / module / decorator
+  instantiation**, **no TypeChecker / TypeResolver / SymbolResolver
+  / DeclarationResolver** introduced. We re-use ONLY the host
+  project's `package.json` as static text.
+
+### Defaults (zero-config)
+
+| Field | Default |
+|---|---|
+| `projectRoot` | `process.cwd()` (or override passed by caller) |
+| `outputPath` | `<projectRoot>/spectra-output/documentation.json` |
+| `outputFormat` | `"json"` |
+| `infoTitle` | `spectra.config.json → package.json → dir basename` |
+| `infoVersion` | `spectra.config.json → package.json → "0.0.0"` |
+| `infoSummary` | `spectra.config.json → package.json → undefined` |
+| `servers` | `[{ url: "http://localhost:3000" }]` |
+
+### Implementation reasoning
+- **Reuse discipline:** No new `TypeChecker` / `TypeResolver` /
+  `SymbolResolver` / `DeclarationResolver`. We only read static
+  JSON files; we do NOT need a type checker.
+- **Hard boundary:** `provider-ast` was NOT touched. `provider-core`
+  was NOT touched. G0 lives entirely in `provider-nestjs/src/config/`
+  per the architectural rules (NestJS-specific concerns live there).
+- **No application-code execution:** The only file reads are
+  `package.json` and `spectra.config.json` — both treated as
+  opaque JSON.
+- **No invented information:** Every default is one of (a) the
+  config file (only if the user set it), (b) `package.json` (only
+  if the field is present and a string), (c) the directory
+  basename (only for `infoTitle` when nothing else applies), or
+  (d) a hard-coded `0.0.0` / `http://localhost:3000`. The
+  `infoSummary` defaults to `undefined` (caller decides how to
+  render), NOT a fake description — the user explicitly forbade
+  inventing descriptions.
+- **Backward compatibility:** No E0–E10 file was modified. The
+  `provider-nestjs/src/index.ts` change adds ONE new export
+  line; it does not modify any existing export.
+- **Testability:** Every behavior is exercised by 23 assertions
+  across 9 cases in `g0-config.test.ts`.
+
+### Exact command
+```bash
+pnpm test:nest:g0-config
+# or directly (from repo root):
+tsx packages/provider-nestjs/test/g0-config.test.ts
+```
+
+### MATCH OUTPUT
+
+```
+===== G0 — CONFIGURATION LOADING =====
+
+  No config: projectRoot: PASS
+  No config: outputPath default: PASS
+  No config: outputFormat = json: PASS
+  No config: infoTitle = dir basename: PASS
+  No config: infoVersion = 0.0.0: PASS
+  No config: infoSummary = undefined: PASS
+  No config: servers default: PASS
+  Full pkg: infoTitle = package.json.name: PASS
+  Full pkg: infoVersion = package.json.version: PASS
+  Full pkg: infoSummary = package.json.description: PASS
+  Partial pkg: title from pkg: PASS
+  Partial pkg: version default 0.0.0: PASS
+  Partial pkg: summary undefined: PASS
+  Config: title from file: PASS
+  Config: version from pkg (config not overriding): PASS
+  Config: description from file: PASS
+  Config: output path resolved to root: PASS
+  Config: server URL from file: PASS
+  Explicit format=json: ok: PASS
+  Invalid JSON: SpectraConfigError: PASS
+  Invalid format=yaml: SpectraConfigError: PASS
+  Non-existent root: SpectraConfigError: PASS
+  Override: projectRoot = override: PASS
+
+Summary: 23/23
+```
+
+### Verification matrix
+
+| G0 requirement | Expected | Actual | Status |
+|---|---|---|---|
+| No config → safe defaults | 7 assertions on default values | 7/7 PASS | **PASS** |
+| Full package.json → name/version/desc | 3 assertions | 3/3 PASS | **PASS** |
+| Partial package.json (name only) | 3 assertions | 3/3 PASS | **PASS** |
+| spectra.config.json partial override | 5 assertions | 5/5 PASS | **PASS** |
+| Explicit `output.format: "json"` | 1 assertion | 1/1 PASS | **PASS** |
+| Invalid JSON → SpectraConfigError | 1 assertion | 1/1 PASS | **PASS** |
+| Invalid `output.format: "yaml"` → SpectraConfigError | 1 assertion | 1/1 PASS | **PASS** |
+| Non-existent projectRoot → SpectraConfigError | 1 assertion | 1/1 PASS | **PASS** |
+| Caller `overrideRoot` parameter | 1 assertion | 1/1 PASS | **PASS** |
+| **Total** | **23** | **23/23** | **PASS** |
+
+### Typecheck
+**PASS** — `tsc 5.9.3` exit=0 for `provider-nestjs`.
+
+### Regression
+- E1 (`controller-semantic`) — exit 0
+- E2 (`route-semantic`) — exit 0
+- E3 (`route-composition-semantic`) — exit 0
+- E4 (`parameter-semantic`) — exit 0
+- E5 (`type-semantic`) — exit 0
+- E6 (`guard-semantic`) — exit 0
+- E7 (`pipe-interceptor-filter-semantic`) — exit 0
+- E8 (`http-metadata-semantic`) — exit 0
+- E9 (`module-semantic`) — exit 1 (pre-existing Part A synthetic gap, NOT from G0 — known from E10 commit `6d164c6`)
+- E10 (`unified-semantic-model`) — exit 1 (same pre-existing Part A gap)
+- `symbol` / `declaration` (D-step) — both exit 0
+- G0 (`g0-config`) — exit 0, 23/23
+
+The two exit=1s (E9/E10) are pre-existing gaps in synthetic test layout, NOT regressions from G0. No E0–E10 source file was modified by G0.
+
+### Architectural notes
+- **Reuse discipline:** No new `TypeChecker` / `TypeResolver` /
+  `SymbolResolver` / `DeclarationResolver`. G0 only reads static
+  JSON via `node:fs`.
+- **Hard boundary:** `provider-ast` NOT touched. `provider-core`
+  NOT touched. G0 lives entirely in `provider-nestjs/src/config/`.
+- **No application-code execution:** Zero `import` of DTOs,
+  classes, providers, controllers, or modules. Only Node's
+  `readFileSync` and `path.join`.
+- **No invented information:** The "default" `servers[0].url =
+  "http://localhost:3000"` is the only semi-arbitrary constant;
+  it matches the value already used in `apps/example-api/src/main.ts`
+  (`process.env.PORT ?? 3000`). `infoSummary` defaults to
+  `undefined` (not invented), and `infoTitle` falls back to the
+  directory basename only if BOTH `spectra.config.json` AND
+  `package.json` are absent — the only way to fabricate a name
+  is by inference from a filesystem path the user already provided.
+
+### Known gaps (deferred)
+- `spectra generate` CLI command itself is not implemented.
+  `packages/cli/` is still empty.
+- No other `output.format` value besides `"json"` is supported.
+  Future `yaml` / `html` would extend `SpectraOutputFormat`.
+- No "auto-derive" of e.g. tags from JSDoc or `@ApiTags`. G0 only
+  supports the explicit `info` override.
+- G0 does NOT provide a way to specify per-operation docs.
+  That is the responsibility of G1–G8 (Documentation Generation).
+
+### Commit
+- `feat(provider-nestjs): configuration loading foundation (G0)`
+
+---
+
+End of G0.
