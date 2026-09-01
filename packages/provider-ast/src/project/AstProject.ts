@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import ts from "typescript";
 import type { LoadedProject } from "./LoadedProject";
 import type { ProjectOptions } from "./ProjectOptions";
@@ -36,10 +37,19 @@ export class AstProject {
             );
         }
 
+        // Resolve relative paths in the tsconfig against the
+        // tsconfig file's own directory, not against `process.cwd()`.
+        // Otherwise running the AST scanner from a different
+        // working directory would silently load the wrong source
+        // files (or none at all).
+        const tsconfigDirectory = path.dirname(
+            path.resolve(options.tsconfigPath),
+        );
+
         const parsed = ts.parseJsonConfigFileContent(
             config.config,
             ts.sys,
-            process.cwd(),
+            tsconfigDirectory,
         );
 
         const program = ts.createProgram({

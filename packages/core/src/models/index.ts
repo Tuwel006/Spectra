@@ -3,3 +3,4 @@ export * from './Info.js';
 export * from './Server.js';
 export * from './Tag.js';
 export * from './Components.js';
+export * from './DecoratorUsage.js';

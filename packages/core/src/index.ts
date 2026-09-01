@@ -13,6 +13,7 @@ export * from "./models/Info";
 export * from "./models/Server";
 export * from "./models/Tag";
 export * from "./models/Components";
+export * from "./models/DecoratorUsage";
 
 export * from "./models/media/MediaType";
 export * from "./models/path/Operation";

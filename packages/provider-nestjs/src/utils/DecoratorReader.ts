@@ -33,6 +33,22 @@ export class DecoratorReader {
 
     }
 
+    /**
+     * Return EVERY decorator on `node` whose identifier matches
+     * `name`. Used by `DecoratorArgExtractor` to support decorators
+     * that may appear multiple times on the same declaration
+     * (e.g. stacked `@Header(...)` decorators).
+     */
+    public findAll(
+        node: ts.Node,
+        name: string,
+    ): readonly ts.Decorator[] {
+
+        return this.getDecorators(node)
+            .filter(decorator => this.getName(decorator) === name);
+
+    }
+
     public getName(
         decorator: ts.Decorator,
     ): string | undefined {
