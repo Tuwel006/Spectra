@@ -3,6 +3,12 @@ import type {
   Operation,
 } from "@spectra/core";
 
+import { supportsRequestBody } from "./httpBodyRules";
+// Re-export so existing callers (this file's `draftFromOperation` +
+// the editor + tests) keep working. The canonical definition lives in
+// `./httpBodyRules` so it can be reused by the request tabs.
+export { supportsRequestBody };
+
 /* ------------------------------------------------------------------ */
 /* Body                                                                */
 /* ------------------------------------------------------------------ */
@@ -328,6 +334,18 @@ export function emptyDraft(): RequestDraft {
  */
 export function draftFromOperation(op: Operation): RequestDraft {
   const hints = collectParamHints(op);
+  const methodAllowsBody = supportsRequestBody(op.method);
+  const bodyType: BodyType = methodAllowsBody
+    ? hints.bodyContentTypes.includes("application/json")
+      ? "smart-form"
+      : hints.contentType === "multipart/form-data"
+        ? "form-data"
+        : hints.contentType === "application/x-www-form-urlencoded"
+          ? "url-encoded"
+          : hints.contentType === "application/xml"
+            ? "xml"
+            : "smart-form"
+    : "json";
   const headers: RequestHeaderRow[] = hints.headers.map((h) => ({
     id: h.id,
     name: h.name,
@@ -345,19 +363,6 @@ export function draftFromOperation(op: Operation): RequestDraft {
       description: "Default Accept header inferred from response media types.",
     });
   }
-
-  // Pick a sensible default body. Smart Form when a JSON schema is
-  // available (so users get a generated form out of the box), with
-  // a fallback to raw JSON when no schema reference exists.
-  const bodyType: BodyType = hints.bodyContentTypes.includes("application/json")
-    ? "smart-form"
-    : hints.contentType === "multipart/form-data"
-      ? "form-data"
-      : hints.contentType === "application/x-www-form-urlencoded"
-        ? "url-encoded"
-        : hints.contentType === "application/xml"
-          ? "xml"
-          : "smart-form";
 
   return {
     pathParams: hints.pathParams.map((p) => ({
@@ -381,11 +386,11 @@ export function draftFromOperation(op: Operation): RequestDraft {
     headers,
     cookies: [],
     bodyType,
-    bodyText: defaultBodyFor(bodyType),
-    multipartFields: bodyType === "form-data"
+    bodyText: methodAllowsBody ? defaultBodyFor(bodyType) : "",
+    multipartFields: methodAllowsBody && bodyType === "form-data"
       ? [{ id: "mpf-1", key: "", value: "", kind: "text", enabled: true }]
       : [],
-    urlEncoded: bodyType === "url-encoded"
+    urlEncoded: methodAllowsBody && bodyType === "url-encoded"
       ? [{ id: "uve-1", key: "", value: "", enabled: true }]
       : [],
     authorization: headers.some((h) => h.name.toLowerCase() === "authorization")
@@ -394,6 +399,13 @@ export function draftFromOperation(op: Operation): RequestDraft {
     selectedExampleId: hints.examples[0]?.id,
   };
 }
+
+/**
+ * `supportsRequestBody` is re-exported above from `./httpBodyRules`.
+ * The canonical definition + `BODY_LESS_METHODS` set live there so
+ * that the request tabs (which need the same rule for the UI) and
+ * this file (which uses it during draft seeding) share one source.
+ */
 
 function defaultBodyFor(type: BodyType): string {
   switch (type) {

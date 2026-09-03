@@ -27,8 +27,10 @@ export function Tabs({
     onChange?.(id);
   };
 
+  const visibleItems = items.filter((i) => !i.hidden);
+
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    const enabled = items.filter((i) => !i.disabled);
+    const enabled = visibleItems.filter((i) => !i.disabled);
     const idx = enabled.findIndex((i) => i.id === current);
     if (idx < 0) return;
     if (event.key === "ArrowRight" || (orientation === "vertical" && event.key === "ArrowDown")) {
@@ -58,7 +60,7 @@ export function Tabs({
         className,
       )}
     >
-      {items.map((item) => {
+      {visibleItems.map((item) => {
         const active = item.id === current;
         const baseClass =
           variant === "pills"

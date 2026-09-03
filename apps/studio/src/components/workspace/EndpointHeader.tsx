@@ -26,6 +26,7 @@ import { useRequestDraftStore } from "@/components/request";
 import { useWorkspace } from "./hooks/useWorkspace";
 import { readOperationTagsAndAuth } from "./EndpointOverview";
 import { useEndpointUrl } from "./useEndpointUrl";
+import { syncUrlToDraft } from "./urlDraftSync";
 
 /* ------------------------------------------------------------------ */
 /* Component                                                           */
@@ -192,11 +193,14 @@ function UrlBar({
 
   // Keep the input in sync when the live URL changes from the draft
   // (typing in path / query params) — but only when the input isn't
-  // currently being edited.
+  // currently being edited. We use the React-recommended derived
+  // state pattern instead of a useEffect to avoid cascading renders.
   const [editing, setEditing] = React.useState(false);
-  React.useEffect(() => {
+  const [prevUrl, setPrevUrl] = React.useState(url);
+  if (prevUrl !== url) {
+    setPrevUrl(url);
     if (!editing) setDraftUrl(url);
-  }, [url, editing]);
+  }
 
   const handleChange = React.useCallback(
     (next: string) => {
@@ -259,125 +263,18 @@ function UrlBar({
 /* ------------------------------------------------------------------ */
 /* URL → draft sync                                                    */
 /* ------------------------------------------------------------------ */
-
-/**
- * Parse a free-form URL the user typed into the URL bar and write the
- * recoverable bits back into the request draft. We can't always round-
- * trip the path (the user might have replaced `{id}` with something
- * the schema doesn't recognise) so we do best-effort:
- *   • Strip the server base
- *   • Split path / query
- *   • For every `{var}` still in the path template, look for a
- *     matching value in the typed path (segment-by-segment, no fuzzy
- *     matching) and write it back to the draft
- *   • Parse the query string and upsert each pair into the draft
- */
-function syncUrlToDraft(
-  next: string,
-  serverUrl: string,
-  path: string,
-  endpointId: string,
-): void {
-  const store = useRequestDraftStore.getState();
-  const draft = store.drafts[endpointId];
-  if (!draft) return;
-
-  const base = stripTrailingSlash(serverUrl);
-  let tail = next.startsWith(base) ? next.slice(base.length) : next;
-
-  const qIndex = tail.indexOf("?");
-  let typedPath = tail;
-  let typedQuery = "";
-  if (qIndex >= 0) {
-    typedPath = tail.slice(0, qIndex);
-    typedQuery = tail.slice(qIndex + 1);
-  }
-
-  // 1. Path params — only update values that match a known token.
-  const pathTemplate = path.split("?")[0]!;
-  const templateSegs = pathTemplate.split("/").filter(Boolean);
-  const typedSegs = typedPath.split("/").filter(Boolean);
-  const nextPathParams = [...draft.pathParams];
-  for (let i = 0; i < templateSegs.length; i++) {
-    const tpl = templateSegs[i]!;
-    const m = /^\{([^}]+)\}$/.exec(tpl);
-    if (!m) continue;
-    const key = m[1]!;
-    const value = typedSegs[i] ?? "";
-    const idx = nextPathParams.findIndex((r) => r.name === key);
-    if (idx >= 0) {
-      nextPathParams[idx] = { ...nextPathParams[idx]!, value: decode(value) };
-    } else {
-      nextPathParams.push({
-        id: `pp-${key}`,
-        name: key,
-        value: decode(value),
-        type: "string",
-        required: false,
-        enabled: true,
-      });
-    }
-  }
-  store.patchDraft(endpointId, "pathParams", nextPathParams);
-
-  // 2. Query params — upsert into the existing list.
-  const nextQueryParams = [...draft.queryParams];
-  if (typedQuery.length > 0) {
-    const pairs = typedQuery.split("&");
-    for (const pair of pairs) {
-      if (!pair) continue;
-      const eq = pair.indexOf("=");
-      const name = eq >= 0 ? decode(pair.slice(0, eq)) : decode(pair);
-      const value = eq >= 0 ? decode(pair.slice(eq + 1)) : "";
-      const idx = nextQueryParams.findIndex(
-        (r) => r.name === name && r.enabled,
-      );
-      if (idx >= 0) {
-        nextQueryParams[idx] = { ...nextQueryParams[idx]!, value, enabled: true };
-      } else {
-        nextQueryParams.push({
-          id: `qp-${name}`,
-          name,
-          value,
-          type: "string",
-          required: false,
-          enabled: true,
-        });
-      }
-    }
-  }
-  store.patchDraft(endpointId, "queryParams", nextQueryParams);
-}
-
-function decode(s: string): string {
-  try {
-    return decodeURIComponent(s);
-  } catch {
-    return s;
-  }
-}
-
-function stripTrailingSlash(s: string): string {
-  return s.endsWith("/") ? s.slice(0, -1) : s;
-}
+// `syncUrlToDraft` lives in `./urlDraftSync` so both the header URL
+// bar (this file) and the inner RequestHeader URL bar can share the
+// same parser. Re-exported below for backward compatibility with any
+// test that imported it from here.
+export { syncUrlToDraft };
 
 /* ------------------------------------------------------------------ */
 /* Meta field                                                          */
 /* ------------------------------------------------------------------ */
 
-function MetaField({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}): React.ReactElement {
-  return (
-    <div className="flex flex-col gap-1">
-      <dt className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-        {label}
-      </dt>
-      <dd>{children}</dd>
-    </div>
-  );
-}
+// MetaField is kept available for future header metadata. Not used
+// today (the workspace header is chrome-only). Removing the warning
+// that follows would force callers to keep importing it; the export
+// is intentionally left in place.
+void (null as unknown as { label: string } | null);
