@@ -1,24 +1,86 @@
 "use client";
 
 import * as React from "react";
-import { KeySquare, Lock, ShieldCheck, User } from "lucide-react";
+import {
+  FileKey2,
+  KeyRound,
+  Lock,
+  ShieldCheck,
+  Tag,
+  User,
+} from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 
-import { Input } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
-import type { AuthConfig, AuthType } from "./request.types";
+
+import {
+  ApiKeyForm,
+  BasicForm,
+  BearerForm,
+  NoAuth,
+} from "./AuthForms";
+import { JwtForm, OAuth2Form } from "./AuthScaffoldForms";
+import { SectionHeader } from "./AuthField";
+import { SummaryPreview } from "./AuthSummary";
 import { useRequestDraftStore } from "./request.store";
-import { cn } from "@/lib/cn";
+import type { AuthConfig, AuthType } from "./request.types";
 
 const DEFAULT_AUTH: AuthConfig = { type: "no-auth", apiKeyIn: "header" };
+
+type AuthTabMeta = {
+  readonly id: AuthType;
+  readonly label: string;
+  readonly icon: React.ReactNode;
+  readonly description: string;
+};
+
+const AUTH_TABS: readonly AuthTabMeta[] = [
+  {
+    id: "no-auth",
+    label: "No Auth",
+    icon: <Lock className="h-3.5 w-3.5" />,
+    description: "Send the request without an Authorization header.",
+  },
+  {
+    id: "bearer",
+    label: "Bearer",
+    icon: <KeyRound className="h-3.5 w-3.5" />,
+    description: "Static bearer token sent in the Authorization header.",
+  },
+  {
+    id: "basic",
+    label: "Basic",
+    icon: <User className="h-3.5 w-3.5" />,
+    description: "Username and password encoded as base64.",
+  },
+  {
+    id: "apiKey",
+    label: "API Key",
+    icon: <FileKey2 className="h-3.5 w-3.5" />,
+    description: "Custom key/value pair added to a header or query string.",
+  },
+  {
+    id: "oauth2",
+    label: "OAuth 2.0",
+    icon: <ShieldCheck className="h-3.5 w-3.5" />,
+    description: "OAuth 2.0 authorization scaffolding.",
+  },
+  {
+    id: "jwt",
+    label: "JWT",
+    icon: <Tag className="h-3.5 w-3.5" />,
+    description: "JSON Web Token sent in the Authorization header.",
+  },
+];
 
 /**
  * Authorization configuration panel.
  *
  * <p>
- *   Selects one of six authentication flavours from a tab strip. Each
- *   flavour renders its own sub-form. No runtime logic — the layout is
- *   UI-only per the spec.
+ *   Selects one of six authentication flavours from a pill-style tab
+ *   strip and renders the matching sub-form. No runtime logic — the
+ *   layout is UI-only per the spec. Sub-components live in
+ *   {@link ./AuthForms}, {@link ./AuthField}, and {@link ./AuthSummary}.
  * </p>
  */
 export function AuthorizationPanel({
@@ -39,21 +101,29 @@ export function AuthorizationPanel({
 
   return (
     <div className="flex flex-col gap-4 p-4">
+      <SectionHeader
+        title="Authorization"
+        description="Configure how this request is authenticated. Values live in the workspace — nothing leaves your browser."
+      />
+
       <Tabs
-        items={[
-          { id: "no-auth", label: "No Auth" },
-          { id: "bearer", label: "Bearer" },
-          { id: "basic", label: "Basic" },
-          { id: "apiKey", label: "API Key" },
-          { id: "oauth2", label: "OAuth 2.0" },
-          { id: "jwt", label: "JWT" },
-        ]}
+        items={AUTH_TABS.map((t) => ({
+          id: t.id,
+          label: (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="text-text-muted">{t.icon}</span>
+              {t.label}
+            </span>
+          ),
+        }))}
         value={auth.type}
         onChange={(v) => setType(v as AuthType)}
         variant="pills"
       />
 
-      <div className="rounded-md border border-border bg-bg-base p-4">
+      <SummaryPreview auth={auth} />
+
+      <div className="flex flex-col gap-3 rounded-md border border-border bg-bg-base p-4">
         {auth.type === "no-auth" ? <NoAuth /> : null}
         {auth.type === "bearer" ? (
           <BearerForm
@@ -79,194 +149,17 @@ export function AuthorizationPanel({
             onIn={(apiKeyIn) => set({ apiKeyIn })}
           />
         ) : null}
-        {auth.type === "oauth2" ? <OAuth2Placeholder /> : null}
-        {auth.type === "jwt" ? <JWTPlaceholder /> : null}
+        {auth.type === "oauth2" ? <OAuth2Form /> : null}
+        {auth.type === "jwt" ? (
+          <JwtForm token={auth.token ?? ""} onToken={(token) => set({ token })} />
+        ) : null}
       </div>
 
-      <p className="px-1 text-[11px] italic text-text-muted">
+      <p className="inline-flex items-center gap-1.5 px-1 text-[11px] italic text-text-muted">
+        <Lock className="h-3 w-3" aria-hidden="true" />
         Authorization values stay inside the workspace. No network calls
         are issued from this panel.
       </p>
     </div>
-  );
-}
-
-function NoAuth(): React.ReactElement {
-  return (
-    <div className="flex items-start gap-3">
-      <Lock className="mt-0.5 h-4 w-4 text-text-muted" aria-hidden="true" />
-      <div>
-        <p className="text-sm font-medium text-text-primary">
-          No authentication required
-        </p>
-        <p className="text-[11px] text-text-muted">
-          The endpoint will be called without any Authorization header.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function BearerForm({
-  token,
-  onToken,
-}: {
-  token: string;
-  onToken: (next: string) => void;
-}): React.ReactElement {
-  return (
-    <div className="flex flex-col gap-2">
-      <Label icon={<KeySquare className="h-3 w-3" />}>Bearer token</Label>
-      <Input
-        size="sm"
-        value={token}
-        onChange={(e) => onToken(e.currentTarget.value)}
-        placeholder="eyJhbGciOi..."
-        type="password"
-      />
-      <p className="text-[11px] text-text-muted">
-        Sends <code className="font-mono">Authorization: Bearer {"<token>"}</code>.
-      </p>
-    </div>
-  );
-}
-
-function BasicForm({
-  username,
-  password,
-  onUsername,
-  onPassword,
-}: {
-  username: string;
-  password: string;
-  onUsername: (next: string) => void;
-  onPassword: (next: string) => void;
-}): React.ReactElement {
-  return (
-    <div className="flex flex-col gap-2">
-      <Label icon={<User className="h-3 w-3" />}>Username</Label>
-      <Input
-        size="sm"
-        value={username}
-        onChange={(e) => onUsername(e.currentTarget.value)}
-        placeholder="user"
-      />
-      <Label icon={<Lock className="h-3 w-3" />}>Password</Label>
-      <Input
-        size="sm"
-        value={password}
-        onChange={(e) => onPassword(e.currentTarget.value)}
-        placeholder="password"
-        type="password"
-      />
-    </div>
-  );
-}
-
-function ApiKeyForm({
-  name,
-  value,
-  inWhere,
-  onName,
-  onValue,
-  onIn,
-}: {
-  name: string;
-  value: string;
-  inWhere: "header" | "query";
-  onName: (next: string) => void;
-  onValue: (next: string) => void;
-  onIn: (next: "header" | "query") => void;
-}): React.ReactElement {
-  return (
-    <div className="flex flex-col gap-2">
-      <Label icon={<KeySquare className="h-3 w-3" />}>Key name</Label>
-      <Input
-        size="sm"
-        value={name}
-        onChange={(e) => onName(e.currentTarget.value)}
-        placeholder="X-API-Key"
-      />
-      <Label>Value</Label>
-      <Input
-        size="sm"
-        value={value}
-        onChange={(e) => onValue(e.currentTarget.value)}
-        placeholder="••••••"
-        type="password"
-      />
-      <Label>Add to</Label>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => onIn("header")}
-          className={cn(
-            "rounded-md border px-3 py-1 text-xs",
-            inWhere === "header"
-              ? "border-accent bg-accent-subtle text-accent"
-              : "border-border bg-bg-base text-text-secondary",
-          )}
-        >
-          Header
-        </button>
-        <button
-          type="button"
-          onClick={() => onIn("query")}
-          className={cn(
-            "rounded-md border px-3 py-1 text-xs",
-            inWhere === "query"
-              ? "border-accent bg-accent-subtle text-accent"
-              : "border-border bg-bg-base text-text-secondary",
-          )}
-        >
-          Query Params
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function OAuth2Placeholder(): React.ReactElement {
-  return (
-    <div className="flex items-start gap-3">
-      <ShieldCheck className="mt-0.5 h-4 w-4 text-text-muted" aria-hidden="true" />
-      <div>
-        <p className="text-sm font-medium text-text-primary">OAuth 2.0</p>
-        <p className="text-[11px] text-text-muted">
-          Configurable in a later phase — UI scaffolding only.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function JWTPlaceholder(): React.ReactElement {
-  return (
-    <div className="flex flex-col gap-2">
-      <Label icon={<KeySquare className="h-3 w-3" />}>JWT token</Label>
-      <Input
-        size="sm"
-        placeholder="eyJhbGciOi..."
-        disabled
-      />
-      <p className="text-[11px] text-text-muted">
-        Decoded header / payload viewers arrive once API testing ships.
-      </p>
-    </div>
-  );
-}
-
-function Label({
-  children,
-  icon,
-}: {
-  children: React.ReactNode;
-  icon?: React.ReactNode;
-}): React.ReactElement {
-  return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-      {icon}
-      {children}
-    </span>
   );
 }
