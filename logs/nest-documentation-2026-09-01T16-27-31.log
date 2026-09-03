@@ -1,0 +1,1382 @@
+===== DOCUMENTATION — END-TO-END INTEGRATION =====
+
+Project root: /Users/karmick/Documents/Tuwel/untitled folder/untitled folder/untitled folder/Spectra/Spectra/apps/example-api
+
+--- documentation structure ---
+{
+  "id": "documentation",
+  "info": {
+    "id": "info",
+    "title": "@spectra/example-api",
+    "version": "0.0.1"
+  },
+  "servers": [
+    {
+      "id": "server-http-localhost-3000",
+      "url": "http://localhost:3000",
+      "description": "Detected from bootstrap entry"
+    }
+  ],
+  "tags": [
+    {
+      "id": "tag-app",
+      "name": "App"
+    },
+    {
+      "id": "tag-cart",
+      "name": "Cart"
+    },
+    {
+      "id": "tag-orders",
+      "name": "Orders"
+    },
+    {
+      "id": "tag-products",
+      "name": "Products"
+    },
+    {
+      "id": "tag-users",
+      "name": "Users"
+    },
+    {
+      "id": "tag-auth",
+      "name": "Auth"
+    },
+    {
+      "id": "tag-root",
+      "name": "Root"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "Cart": {
+        "id": "Cart",
+        "name": "Cart",
+        "properties": {
+          "items": {
+            "id": "items",
+            "name": "items",
+            "valueType": {
+              "kind": "array",
+              "elementType": {
+                "kind": "reference",
+                "reference": {
+                  "id": "CartItem"
+                }
+              }
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "totalItems": {
+            "id": "totalItems",
+            "name": "totalItems",
+            "valueType": {
+              "kind": "primitive",
+              "name": "number"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          }
+        }
+      },
+      "AddToCartDto": {
+        "id": "AddToCartDto",
+        "name": "AddToCartDto",
+        "properties": {
+          "productId": {
+            "id": "productId",
+            "name": "productId",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "quantity": {
+            "id": "quantity",
+            "name": "quantity",
+            "valueType": {
+              "kind": "primitive",
+              "name": "number"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          }
+        }
+      },
+      "CreateOrderDto": {
+        "id": "CreateOrderDto",
+        "name": "CreateOrderDto",
+        "properties": {
+          "userId": {
+            "id": "userId",
+            "name": "userId",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "items": {
+            "id": "items",
+            "name": "items",
+            "valueType": {
+              "kind": "array",
+              "elementType": {
+                "kind": "reference",
+                "reference": {
+                  "id": "OrderItemDto"
+                }
+              }
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "shippingAddress": {
+            "id": "shippingAddress",
+            "name": "shippingAddress",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          }
+        }
+      },
+      "Order": {
+        "id": "Order",
+        "name": "Order",
+        "properties": {
+          "id": {
+            "id": "id",
+            "name": "id",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "userId": {
+            "id": "userId",
+            "name": "userId",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "items": {
+            "id": "items",
+            "name": "items",
+            "valueType": {
+              "kind": "array",
+              "elementType": {
+                "kind": "reference",
+                "reference": {
+                  "id": "OrderItem"
+                }
+              }
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "shippingAddress": {
+            "id": "shippingAddress",
+            "name": "shippingAddress",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "status": {
+            "id": "status",
+            "name": "status",
+            "valueType": {
+              "kind": "primitive",
+              "name": "any"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "createdAt": {
+            "id": "createdAt",
+            "name": "createdAt",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          }
+        }
+      },
+      "CreateProductDto": {
+        "id": "CreateProductDto",
+        "name": "CreateProductDto",
+        "properties": {
+          "name": {
+            "id": "name",
+            "name": "name",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "description": {
+            "id": "description",
+            "name": "description",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "price": {
+            "id": "price",
+            "name": "price",
+            "valueType": {
+              "kind": "primitive",
+              "name": "number"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "stock": {
+            "id": "stock",
+            "name": "stock",
+            "valueType": {
+              "kind": "primitive",
+              "name": "number"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "category": {
+            "id": "category",
+            "name": "category",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          }
+        }
+      },
+      "UpdateProductDto": {
+        "id": "UpdateProductDto",
+        "name": "UpdateProductDto",
+        "properties": {
+          "name": {
+            "id": "name",
+            "name": "name",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": false,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "description": {
+            "id": "description",
+            "name": "description",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": false,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "price": {
+            "id": "price",
+            "name": "price",
+            "valueType": {
+              "kind": "primitive",
+              "name": "number"
+            },
+            "modifiers": {
+              "required": false,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "stock": {
+            "id": "stock",
+            "name": "stock",
+            "valueType": {
+              "kind": "primitive",
+              "name": "number"
+            },
+            "modifiers": {
+              "required": false,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "category": {
+            "id": "category",
+            "name": "category",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": false,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          }
+        }
+      },
+      "Product": {
+        "id": "Product",
+        "name": "Product",
+        "properties": {
+          "id": {
+            "id": "id",
+            "name": "id",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "name": {
+            "id": "name",
+            "name": "name",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "description": {
+            "id": "description",
+            "name": "description",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "price": {
+            "id": "price",
+            "name": "price",
+            "valueType": {
+              "kind": "primitive",
+              "name": "number"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "stock": {
+            "id": "stock",
+            "name": "stock",
+            "valueType": {
+              "kind": "primitive",
+              "name": "number"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "category": {
+            "id": "category",
+            "name": "category",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          }
+        }
+      },
+      "CreateUserDto": {
+        "id": "CreateUserDto",
+        "name": "CreateUserDto",
+        "properties": {
+          "name": {
+            "id": "name",
+            "name": "name",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "email": {
+            "id": "email",
+            "name": "email",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "password": {
+            "id": "password",
+            "name": "password",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          }
+        }
+      },
+      "LoginDto": {
+        "id": "LoginDto",
+        "name": "LoginDto",
+        "properties": {
+          "email": {
+            "id": "email",
+            "name": "email",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "password": {
+            "id": "password",
+            "name": "password",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          }
+        }
+      },
+      "User": {
+        "id": "User",
+        "name": "User",
+        "properties": {
+          "id": {
+            "id": "id",
+            "name": "id",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "name": {
+            "id": "name",
+            "name": "name",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "email": {
+            "id": "email",
+            "name": "email",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          },
+          "createdAt": {
+            "id": "createdAt",
+            "name": "createdAt",
+            "valueType": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "modifiers": {
+              "required": true,
+              "readonly": false,
+              "nullable": false,
+              "deprecated": false
+            }
+          }
+        }
+      }
+    },
+    "responses": {},
+    "parameters": {},
+    "requestBodies": {},
+    "headers": {},
+    "examples": {},
+    "securitySchemes": {}
+  },
+  "paths": {
+    "/": {
+      "id": "/",
+      "url": "/",
+      "operations": {
+        "GET": {
+          "id": "/#GET",
+          "operationId": "AppController.getHello#GET",
+          "method": "GET",
+          "request": {
+            "pathParameters": [],
+            "queryParameters": [],
+            "headers": []
+          },
+          "responses": {
+            "200": {
+              "headers": []
+            }
+          }
+        }
+      }
+    },
+    "/cart": {
+      "id": "/cart",
+      "url": "/cart",
+      "operations": {
+        "GET": {
+          "id": "/cart#GET",
+          "operationId": "CartController.getCart#GET",
+          "method": "GET",
+          "request": {
+            "pathParameters": [],
+            "queryParameters": [],
+            "headers": []
+          },
+          "responses": {
+            "200": {
+              "headers": [],
+              "body": {
+                "content": {
+                  "application/json": {
+                    "contentType": "application/json",
+                    "schema": {
+                      "id": "Cart"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "guards": [
+            {
+              "id": "decorator-0-JwtAuthGuard",
+              "name": "JwtAuthGuard",
+              "kind": "custom",
+              "sourceText": "JwtAuthGuard",
+              "parameters": []
+            }
+          ]
+        }
+      }
+    },
+    "/cart/items": {
+      "id": "/cart/items",
+      "url": "/cart/items",
+      "operations": {
+        "POST": {
+          "id": "/cart/items#POST",
+          "operationId": "CartController.addItem#POST",
+          "method": "POST",
+          "request": {
+            "pathParameters": [],
+            "queryParameters": [],
+            "headers": [],
+            "body": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "contentType": "application/json",
+                  "schema": {
+                    "id": "AddToCartDto"
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "headers": [],
+              "body": {
+                "content": {
+                  "application/json": {
+                    "contentType": "application/json",
+                    "schema": {
+                      "id": "Cart"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "guards": [
+            {
+              "id": "decorator-0-JwtAuthGuard",
+              "name": "JwtAuthGuard",
+              "kind": "custom",
+              "sourceText": "JwtAuthGuard",
+              "parameters": []
+            }
+          ]
+        }
+      }
+    },
+    "/cart/items/:productId": {
+      "id": "/cart/items/:productId",
+      "url": "/cart/items/:productId",
+      "operations": {
+        "DELETE": {
+          "id": "/cart/items/:productId#DELETE",
+          "operationId": "CartController.removeItem#DELETE",
+          "method": "DELETE",
+          "request": {
+            "pathParameters": [
+              {
+                "id": "CartController.removeItem#DELETE.param.productId",
+                "name": "productId",
+                "location": "path",
+                "required": true
+              }
+            ],
+            "queryParameters": [],
+            "headers": []
+          },
+          "responses": {
+            "200": {
+              "headers": [],
+              "body": {
+                "content": {
+                  "application/json": {
+                    "contentType": "application/json",
+                    "schema": {
+                      "id": "Cart"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "guards": [
+            {
+              "id": "decorator-0-JwtAuthGuard",
+              "name": "JwtAuthGuard",
+              "kind": "custom",
+              "sourceText": "JwtAuthGuard",
+              "parameters": []
+            }
+          ]
+        }
+      }
+    },
+    "/orders": {
+      "id": "/orders",
+      "url": "/orders",
+      "operations": {
+        "GET": {
+          "id": "/orders#GET",
+          "operationId": "OrdersController.findAll#GET",
+          "method": "GET",
+          "request": {
+            "pathParameters": [],
+            "queryParameters": [],
+            "headers": []
+          },
+          "responses": {
+            "200": {
+              "headers": [],
+              "body": {
+                "content": {
+                  "application/json": {
+                    "contentType": "application/json",
+                    "schema": {
+                      "id": "Order"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "guards": [
+            {
+              "id": "decorator-0-JwtAuthGuard",
+              "name": "JwtAuthGuard",
+              "kind": "custom",
+              "sourceText": "JwtAuthGuard",
+              "parameters": []
+            }
+          ]
+        },
+        "POST": {
+          "id": "/orders#POST",
+          "operationId": "OrdersController.create#POST",
+          "method": "POST",
+          "request": {
+            "pathParameters": [],
+            "queryParameters": [],
+            "headers": [],
+            "body": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "contentType": "application/json",
+                  "schema": {
+                    "id": "CreateOrderDto"
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "headers": [],
+              "body": {
+                "content": {
+                  "application/json": {
+                    "contentType": "application/json",
+                    "schema": {
+                      "id": "Order"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "guards": [
+            {
+              "id": "decorator-0-JwtAuthGuard",
+              "name": "JwtAuthGuard",
+              "kind": "custom",
+              "sourceText": "JwtAuthGuard",
+              "parameters": []
+            }
+          ]
+        }
+      }
+    },
+    "/orders/:id": {
+      "id": "/orders/:id",
+      "url": "/orders/:id",
+      "operations": {
+        "GET": {
+          "id": "/orders/:id#GET",
+          "operationId": "OrdersController.findOne#GET",
+          "method": "GET",
+          "request": {
+            "pathParameters": [
+              {
+                "id": "OrdersController.findOne#GET.param.id",
+                "name": "id",
+                "location": "path",
+                "required": true
+              }
+            ],
+            "queryParameters": [],
+            "headers": []
+          },
+          "responses": {
+            "200": {
+              "headers": [],
+              "body": {
+                "content": {
+                  "application/json": {
+                    "contentType": "application/json",
+                    "schema": {
+                      "id": "Order"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "guards": [
+            {
+              "id": "decorator-0-JwtAuthGuard",
+              "name": "JwtAuthGuard",
+              "kind": "custom",
+              "sourceText": "JwtAuthGuard",
+              "parameters": []
+            }
+          ]
+        }
+      }
+    },
+    "/products": {
+      "id": "/products",
+      "url": "/products",
+      "operations": {
+        "GET": {
+          "id": "/products#GET",
+          "operationId": "ProductsController.findAll#GET",
+          "method": "GET",
+          "request": {
+            "pathParameters": [],
+            "queryParameters": [
+              {
+                "id": "ProductsController.findAll#GET.query.category",
+                "name": "category",
+                "location": "query",
+                "required": true
+              }
+            ],
+            "headers": []
+          },
+          "responses": {
+            "200": {
+              "headers": [],
+              "body": {
+                "content": {
+                  "application/json": {
+                    "contentType": "application/json",
+                    "schema": {
+                      "id": "Product"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "POST": {
+          "id": "/products#POST",
+          "operationId": "ProductsController.create#POST",
+          "method": "POST",
+          "request": {
+            "pathParameters": [],
+            "queryParameters": [],
+            "headers": [],
+            "body": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "contentType": "application/json",
+                  "schema": {
+                    "id": "CreateProductDto"
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "headers": [],
+              "body": {
+                "content": {
+                  "application/json": {
+                    "contentType": "application/json",
+                    "schema": {
+                      "id": "Product"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/products/:id": {
+      "id": "/products/:id",
+      "url": "/products/:id",
+      "operations": {
+        "GET": {
+          "id": "/products/:id#GET",
+          "operationId": "ProductsController.findOne#GET",
+          "method": "GET",
+          "request": {
+            "pathParameters": [
+              {
+                "id": "ProductsController.findOne#GET.param.id",
+                "name": "id",
+                "location": "path",
+                "required": true
+              }
+            ],
+            "queryParameters": [],
+            "headers": []
+          },
+          "responses": {
+            "200": {
+              "headers": [],
+              "body": {
+                "content": {
+                  "application/json": {
+                    "contentType": "application/json",
+                    "schema": {
+                      "id": "Product"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "PUT": {
+          "id": "/products/:id#PUT",
+          "operationId": "ProductsController.update#PUT",
+          "method": "PUT",
+          "request": {
+            "pathParameters": [
+              {
+                "id": "ProductsController.update#PUT.param.id",
+                "name": "id",
+                "location": "path",
+                "required": true
+              }
+            ],
+            "queryParameters": [],
+            "headers": [],
+            "body": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "contentType": "application/json",
+                  "schema": {
+                    "id": "UpdateProductDto"
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "headers": [],
+              "body": {
+                "content": {
+                  "application/json": {
+                    "contentType": "application/json",
+                    "schema": {
+                      "id": "Product"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "DELETE": {
+          "id": "/products/:id#DELETE",
+          "operationId": "ProductsController.remove#DELETE",
+          "method": "DELETE",
+          "request": {
+            "pathParameters": [
+              {
+                "id": "ProductsController.remove#DELETE.param.id",
+                "name": "id",
+                "location": "path",
+                "required": true
+              }
+            ],
+            "queryParameters": [],
+            "headers": []
+          },
+          "responses": {
+            "204": {
+              "headers": []
+            }
+          }
+        }
+      }
+    },
+    "/users/register/test": {
+      "id": "/users/register/test",
+      "url": "/users/register/test",
+      "operations": {
+        "POST": {
+          "id": "/users/register/test#POST",
+          "operationId": "UsersController.register#POST",
+          "method": "POST",
+          "request": {
+            "pathParameters": [],
+            "queryParameters": [],
+            "headers": [],
+            "body": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "contentType": "application/json",
+                  "schema": {
+                    "id": "CreateUserDto"
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "headers": [],
+              "body": {
+                "content": {
+                  "application/json": {
+                    "contentType": "application/json",
+                    "schema": {
+                      "id": "User"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/login": {
+      "id": "/users/login",
+      "url": "/users/login",
+      "operations": {
+        "POST": {
+          "id": "/users/login#POST",
+          "operationId": "UsersController.login#POST",
+          "method": "POST",
+          "request": {
+            "pathParameters": [],
+            "queryParameters": [],
+            "headers": [],
+            "body": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "contentType": "application/json",
+                  "schema": {
+                    "id": "LoginDto"
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "headers": []
+            }
+          }
+        }
+      }
+    },
+    "/users/profile/:id": {
+      "id": "/users/profile/:id",
+      "url": "/users/profile/:id",
+      "operations": {
+        "GET": {
+          "id": "/users/profile/:id#GET",
+          "operationId": "UsersController.getProfile#GET",
+          "method": "GET",
+          "request": {
+            "pathParameters": [
+              {
+                "id": "UsersController.getProfile#GET.param.id",
+                "name": "id",
+                "location": "path",
+                "required": true
+              }
+            ],
+            "queryParameters": [],
+            "headers": []
+          },
+          "responses": {
+            "200": {
+              "headers": [],
+              "body": {
+                "content": {
+                  "application/json": {
+                    "contentType": "application/json",
+                    "schema": {
+                      "id": "User"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "guards": [
+            {
+              "id": "decorator-0-JwtAuthGuard",
+              "name": "JwtAuthGuard",
+              "kind": "custom",
+              "sourceText": "JwtAuthGuard",
+              "parameters": []
+            }
+          ]
+        }
+      }
+    },
+    "/auth/login": {
+      "id": "/auth/login",
+      "url": "/auth/login",
+      "operations": {
+        "POST": {
+          "id": "/auth/login#POST",
+          "operationId": "AuthController.login#POST",
+          "method": "POST",
+          "request": {
+            "pathParameters": [],
+            "queryParameters": [],
+            "headers": []
+          },
+          "responses": {
+            "201": {
+              "headers": []
+            }
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "id": "/auth/me",
+      "url": "/auth/me",
+      "operations": {
+        "GET": {
+          "id": "/auth/me#GET",
+          "operationId": "AuthController.me#GET",
+          "method": "GET",
+          "request": {
+            "pathParameters": [],
+            "queryParameters": [],
+            "headers": []
+          },
+          "responses": {
+            "200": {
+              "headers": []
+            }
+          },
+          "guards": [
+            {
+              "id": "decorator-0-JwtAuthGuard",
+              "name": "JwtAuthGuard",
+              "kind": "custom",
+              "sourceText": "JwtAuthGuard",
+              "parameters": []
+            }
+          ]
+        }
+      }
+    },
+    "/root": {
+      "id": "/root",
+      "url": "/root",
+      "operations": {
+        "GET": {
+          "id": "/root#GET",
+          "operationId": "RootController.root#GET",
+          "method": "GET",
+          "request": {
+            "pathParameters": [],
+            "queryParameters": [],
+            "headers": []
+          },
+          "responses": {
+            "200": {
+              "headers": []
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+--- assertions ---
+  PASS  documentation.id === 'documentation'
+  PASS  info.title === '@spectra/example-api'
+  PASS  info.version === '0.0.1'
+  PASS  info.summary is string or undefined
+  PASS  servers is an array
+  PASS  servers emit at least one entry from bootstrap port (3000)
+  PASS  servers have unique ids
+  PASS  tags is an array
+  PASS  tags contains the expected NestJS controller prefixes
+  PASS  tags have unique ids
+  PASS  components.schemas is populated
+  PASS  CreateProductDto schema is present
+  PASS  CreateUserDto schema is present
+  PASS  UpdateProductDto schema is present
+  PASS  LoginDto schema is present
+  PASS  AddToCartDto schema is present
+  PASS  CreateProductDto has expected properties
+  PASS  CreateProductDto.name is string primitive
+  PASS  CreateProductDto.price is number primitive
+  PASS  paths is populated
+  PASS  /products path exists
+  PASS  /products/:id path exists
+  PASS  /auth/login path exists
+  PASS  ProductsController.findOne operation has operationId
+  PASS  ProductsController.findOne operation is GET
+  PASS  ProductsController.findOne has 1 path parameter (id)
+  PASS  ProductsController.findOne path param name is 'id'
+  PASS  ProductsController.findOne has 200 response
+  PASS  ProductsController.findOne 200 response body is a Schema reference
+  PASS  ProductsController.create operation is POST
+  PASS  ProductsController.create has CreateProductDto body schema
+  PASS  ProductsController.create returns 201 (from @HttpCode(HttpStatus.CREATED))
+  PASS  ProductsController.findAll has category query param
+  PASS  UsersController.login exists as POST
+  PASS  UsersController.login has LoginDto body schema
+  PASS  UsersController.login returns 200 (from @HttpCode(HttpStatus.OK))
+  PASS  UsersController.register exists as POST
+  PASS  UsersController.register returns 201 (from @HttpCode(HttpStatus.CREATED))
+  PASS  UsersController.register has CreateUserDto body schema
+  PASS  UsersController.getProfile exists as GET
+  PASS  UsersController.getProfile has :id path parameter
+  PASS  UsersController.getProfile has JwtAuthGuard as custom guard
+  PASS  OrdersController.findAll inherits class-level JwtAuthGuard
+  PASS  CartController inherits class-level JwtAuthGuard
+  PASS  AuthController.me has method-level JwtAuthGuard
+  PASS  ProductsController.findOne has no guards (no @UseGuards anywhere)
+  PASS  every path has an id
+  PASS  every operation has a unique id
+
+Summary: 48/48
