@@ -15,16 +15,52 @@ import type { Operation } from "@spectra/core";
 /**
  * The full endpoint workspace page.
  *
- * <p>One continuous page composed of vertically stacked sections:</p>
- *   1. EndpointHeader  — Method · URL · Send + Server + Copy/Pin/Share
- *   2. Request         — Params / Headers / Query / Cookies / Body
- *   3. Response        — Documentation / Runtime
+ * <p>Single-screen layout:</p>
  *
- * <p>Each section's expand state, scroll position and selected sub-tab
- * are persisted per tab in the workspace store so switching endpoints
- * never loses edits.</p>
+ * <pre>
+ *   ┌─────────────────────────────────────────────────────────────────────┐
+ *   │ EndpointHeader  (method · server · URL · actions)                   │
+ *   ├──────────────────────────────────┬──────────────────────────────────┤
+ *   │ Request  (left half)             │ Response  (right half)           │
+ *   │   params / headers / query /     │   documentation / runtime        │
+ *   │   authorization / cookies / body │   status · body · headers · …   │
+ *   └──────────────────────────────────┴──────────────────────────────────┘
+ * </pre>
+ *
+ * <p>Both halves scroll independently. The Request and Response
+ * columns share a thin vertical divider; their internal
+ * {@link CollapsibleSection}s no longer need the bottom border that
+ * was needed for the stacked variant.</p>
  */
 export function EndpointWorkspace({
+  tabId,
+  operation,
+}: {
+  tabId: string;
+  operation: Operation;
+}): React.ReactElement {
+  return (
+    <div
+      id={`tabpanel-${tabId}`}
+      role="tabpanel"
+      aria-labelledby={`tab-${tabId}`}
+      className="flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden bg-bg-base"
+    >
+      <EndpointHeader operation={operation} />
+
+      <div className="grid min-h-0 flex-1 grid-cols-1 divide-y divide-border overflow-hidden md:grid-cols-2 md:divide-x md:divide-y-0">
+        <RequestPanel tabId={tabId} operation={operation} />
+        <ResponsePanel tabId={tabId} operation={operation} />
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Split panels                                                        */
+/* ------------------------------------------------------------------ */
+
+function RequestPanel({
   tabId,
   operation,
 }: {
@@ -47,23 +83,27 @@ export function EndpointWorkspace({
 
   return (
     <div
-      id={`tabpanel-${tabId}`}
-      role="tabpanel"
-      aria-labelledby={`tab-${tabId}`}
-      className="flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden bg-bg-base"
+      ref={scrollerRef}
+      onScroll={(event) =>
+        setScrollY(tabId, (event.target as HTMLDivElement).scrollTop)
+      }
+      className="min-h-0 overflow-y-auto"
     >
-      <EndpointHeader operation={operation} />
+      <RequestSection tabId={tabId} operation={operation} />
+    </div>
+  );
+}
 
-      <div
-        ref={scrollerRef}
-        onScroll={(event) =>
-          setScrollY(tabId, (event.target as HTMLDivElement).scrollTop)
-        }
-        className="min-h-0 flex-1 overflow-y-auto"
-      >
-        <RequestSection tabId={tabId} operation={operation} />
-        <ResponseSection tabId={tabId} operation={operation} />
-      </div>
+function ResponsePanel({
+  tabId,
+  operation,
+}: {
+  tabId: string;
+  operation: Operation;
+}): React.ReactElement {
+  return (
+    <div className="min-h-0 overflow-y-auto">
+      <ResponseSection tabId={tabId} operation={operation} />
     </div>
   );
 }

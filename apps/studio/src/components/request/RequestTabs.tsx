@@ -16,6 +16,9 @@ import {
 import { Tabs } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
+import type { HttpMethod } from "@spectra/core";
+
+import { supportsRequestBody } from "./httpBodyRules";
 
 export type RequestTabId =
   | "overview"
@@ -33,18 +36,28 @@ export type RequestTabId =
  * (Overview, Authorization, Path Params, Query, Headers, Cookies, Body,
  * Examples). The panel below the strip is rendered by the caller — see
  * {@link RequestEditor}.
+ *
+ * <p>The Body tab is hidden (not just disabled) for HTTP methods that
+ * REST convention says don't carry a request body — currently GET,
+ * HEAD, OPTIONS. Hiding prevents the user from constructing a request
+ * the server will silently drop. If the user toggles the method in
+ * the header, the active tab also falls back to the previous valid
+ * one so the UI never lands on a hidden tab.</p>
  */
 export function RequestTabs({
   value,
   onChange,
   counts,
   disabled,
+  method,
 }: {
   value: RequestTabId;
   onChange: (next: RequestTabId) => void;
   counts?: Partial<Record<RequestTabId, number>>;
   disabled?: Partial<Record<RequestTabId, boolean>>;
+  method?: HttpMethod;
 }): React.ReactElement {
+  const bodyAllowed = method === undefined || supportsRequestBody(method);
   return (
     <Tabs
       items={[
@@ -73,7 +86,10 @@ export function RequestTabs({
               Path Params
             </TabLabel>
           ),
-          badge: counts?.path !== undefined ? <CountChip count={counts.path} /> : undefined,
+          badge:
+            counts?.path !== undefined ? (
+              <CountChip count={counts.path} />
+            ) : undefined,
           disabled: disabled?.path,
         },
         {
@@ -83,7 +99,10 @@ export function RequestTabs({
               Query
             </TabLabel>
           ),
-          badge: counts?.query !== undefined ? <CountChip count={counts.query} /> : undefined,
+          badge:
+            counts?.query !== undefined ? (
+              <CountChip count={counts.query} />
+            ) : undefined,
           disabled: disabled?.query,
         },
         {
@@ -93,7 +112,10 @@ export function RequestTabs({
               Headers
             </TabLabel>
           ),
-          badge: counts?.headers !== undefined ? <CountChip count={counts.headers} /> : undefined,
+          badge:
+            counts?.headers !== undefined ? (
+              <CountChip count={counts.headers} />
+            ) : undefined,
           disabled: disabled?.headers,
         },
         {
@@ -103,7 +125,10 @@ export function RequestTabs({
               Cookies
             </TabLabel>
           ),
-          badge: counts?.cookies !== undefined ? <CountChip count={counts.cookies} /> : undefined,
+          badge:
+            counts?.cookies !== undefined ? (
+              <CountChip count={counts.cookies} />
+            ) : undefined,
           disabled: disabled?.cookies,
         },
         {
@@ -114,6 +139,8 @@ export function RequestTabs({
             </TabLabel>
           ),
           disabled: disabled?.body,
+          // Hide entirely for body-less methods (GET / HEAD / OPTIONS).
+          hidden: !bodyAllowed,
         },
         {
           id: "examples",

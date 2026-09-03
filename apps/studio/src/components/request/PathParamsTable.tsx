@@ -60,7 +60,7 @@ export function PathParamsTable({
   };
 
   return (
-    <div className="flex flex-col gap-3 p-4">
+    <div className="flex flex-col gap-4 px-4 py-4">
       <FormColumnHeader
         columns={[
           { label: "Name", width: "minmax(140px,1.4fr)" },
@@ -78,7 +78,7 @@ export function PathParamsTable({
           description="Path parameters declared in the documentation appear here automatically."
         />
       ) : (
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-2">
           {rows.map((row) => (
             <FormFieldRow
               key={row.id}
@@ -98,8 +98,13 @@ export function PathParamsTable({
         </div>
       )}
 
-      <div>
-        <Button variant="outline" size="sm" onClick={add} className="gap-1.5">
+      <div className="pt-1">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={add}
+          className="h-8 gap-1.5 rounded-md border-border/70 px-3 text-[12px] text-text-secondary hover:border-accent/50 hover:bg-accent/5 hover:text-accent"
+        >
           <Plus className="h-3.5 w-3.5" />
           Add parameter
         </Button>

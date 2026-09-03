@@ -28,6 +28,7 @@ import {
   collectParamHints,
   emptyDraft,
 } from "./request.types";
+import { supportsRequestBody } from "./httpBodyRules";
 
 /**
  * Root component of the request editor.
@@ -38,6 +39,11 @@ import {
  *   request store and renders the sub-panel that matches the active
  *   tab. Send is intentionally not wired — Phase 5 ships UI only.
  * </p>
+ *
+ * <p>When the user toggles the HTTP method to one that REST convention
+ * says can't carry a body (GET / HEAD / OPTIONS), the active tab
+ * falls back to "overview" so the panel never renders inside a hidden
+ * slot.</p>
  */
 export function RequestEditor({
   operation,
@@ -58,7 +64,6 @@ export function RequestEditor({
 
   const [tab, setTab] = React.useState<RequestTabId>("overview");
   const [method, setMethod] = React.useState<HttpMethod>(operation.method);
-  const [url, setUrl] = React.useState<string>(deriveUrl(operation));
   const ensureDraft = useRequestDraftStore((s) => s.ensureDraft);
 
   // Make sure the draft exists for SSR-safe first paint as well.
@@ -66,28 +71,34 @@ export function RequestEditor({
     ensureDraft(endpointId);
   }, [ensureDraft, endpointId]);
 
+  // Whenever the method changes such that the current tab no longer
+  // makes sense, fall back to a safe neighbour. Today the only rule
+  // is: if the body tab is open and the new method is body-less,
+  // jump back to "overview".
+  React.useEffect(() => {
+    if (tab === "body" && !supportsRequestBody(method)) {
+      setTab("overview");
+    }
+  }, [method, tab]);
+
   const hint = React.useMemo(() => collectParamHints(operation), [operation]);
   const enabledHeaders = draft.headers.filter((h) => h.enabled).length;
   const enabledQuery = draft.queryParams.filter((p) => p.enabled).length;
-  const hasBody =
-    draft.bodyType !== "binary" &&
-    draft.bodyText.trim().length > 0;
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-bg-base">
       <RequestHeader
+        operation={operation}
         endpointId={endpointId}
         method={method}
-        url={url}
-        hasBody={hasBody}
         onMethodChange={setMethod}
-        onUrlChange={setUrl}
       />
 
       <div className="flex items-center justify-between border-b border-border bg-bg-base px-3 py-1">
         <RequestTabs
           value={tab}
           onChange={setTab}
+          method={method}
           counts={{
             path: draft.pathParams.length,
             query: enabledQuery,
@@ -111,18 +122,13 @@ export function RequestEditor({
             {tab === "query" ? <QueryParamsTable endpointId={endpointId} /> : null}
             {tab === "headers" ? <HeadersTable endpointId={endpointId} /> : null}
             {tab === "cookies" ? <CookiesTable endpointId={endpointId} /> : null}
-            {tab === "body" ? <RequestBody endpointId={endpointId} /> : null}
+            {tab === "body" && supportsRequestBody(method) ? (
+              <RequestBody endpointId={endpointId} />
+            ) : null}
             {tab === "examples" ? <ExamplesPanel operation={operation} /> : null}
           </ScrollArea>
         )}
       </div>
     </div>
   );
-}
-
-/** Best-effort placeholder URL until the OpenAPI provider exposes it. */
-function deriveUrl(op: Operation): string {
-  // We don't yet have a real URL provider, so reconstruct from the
-  // operation id: `tag:method`. Useful as a default in the URL field.
-  return op.id;
 }

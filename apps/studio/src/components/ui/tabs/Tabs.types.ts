@@ -6,6 +6,8 @@ export interface TabItem {
   /** Optional badge rendered next to the label (counts, "new", etc). */
   readonly badge?: ReactNode;
   readonly disabled?: boolean;
+  /** When true, the tab is omitted from the strip entirely. */
+  readonly hidden?: boolean;
 }
 
 export interface TabsProps {

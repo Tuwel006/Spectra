@@ -25,6 +25,7 @@ import {
   useRequestMounted,
 } from "@/components/request";
 
+import { supportsRequestBody } from "@/components/request/httpBodyRules";
 import { useWorkspaceStore } from "./store/workspaceStore";
 import { CollapsibleSection } from "./CollapsibleSection";
 import type { Operation } from "@spectra/core";
@@ -78,6 +79,13 @@ const SUB_TAB_ICON: Record<RequestSubTab, React.ReactNode> = {
  * from `@/components/request`. Per-tab sub-tab selection lives in
  * the workspace store so switching tabs doesn't reset the user's
  * place — matches the {@link ResponseSection} tab pattern.
+ *
+ * <p>The Body sub-tab is hidden for HTTP methods that REST convention
+ * says don't carry a body (GET / HEAD / OPTIONS) — same rule as the
+ * inner {@link RequestEditor} tab strip. If the active sub-tab is
+ * `body` and the user toggles the method to a body-less one, we fall
+ * back to `params` so the panel area never renders inside a hidden
+ * slot.</p>
  */
 export function RequestSection({
   tabId,
@@ -111,6 +119,16 @@ export function RequestSection({
   );
   const toggleSection = useWorkspaceStore((s) => s.toggleSection);
 
+  const bodyAllowed = supportsRequestBody(operation.method);
+
+  // If the user lands on the body sub-tab for an operation whose
+  // method forbids a body (e.g. GET), bounce them back to params.
+  React.useEffect(() => {
+    if (requestTab === "body" && !bodyAllowed) {
+      setRequestTab(tabId, "params");
+    }
+  }, [requestTab, bodyAllowed, setRequestTab, tabId]);
+
   return (
     <CollapsibleSection
       id={`req-${tabId}`}
@@ -132,6 +150,10 @@ export function RequestSection({
                 {SUB_TAB_LABEL[id]}
               </span>
             ),
+            // Hide the Body sub-tab for body-less methods (GET / HEAD
+            // / OPTIONS). `hidden` strips the entry from both the
+            // keyboard navigation and the rendered list.
+            hidden: id === "body" && !bodyAllowed,
           }))}
         />
       </div>
@@ -152,7 +174,7 @@ export function RequestSection({
         {requestTab === "cookies" ? (
           <CookiesTable endpointId={endpointId} />
         ) : null}
-        {requestTab === "body" ? (
+        {requestTab === "body" && bodyAllowed ? (
           <RequestBody endpointId={endpointId} operation={operation} />
         ) : null}
       </div>

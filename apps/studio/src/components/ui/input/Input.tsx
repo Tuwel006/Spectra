@@ -9,20 +9,22 @@ import type { InputProps } from "./Input.types";
 
 const fieldStyles = cva(
   [
-    "relative flex w-full items-center rounded-md border bg-bg-base transition-colors",
-    "focus-within:border-accent",
+    "relative flex w-full items-center rounded-lg border bg-bg-base transition-all duration-150",
+    "hover:border-border-strong/60",
+    "focus-within:border-accent/70 focus-within:shadow-[0_0_0_3px_var(--accent-soft,rgba(99,102,241,0.12))]",
     "disabled:cursor-not-allowed disabled:opacity-50",
   ],
   {
     variants: {
       size: {
         sm: "h-7 text-xs",
-        md: "h-8 text-sm",
-        lg: "h-10 text-sm",
+        md: "h-9 text-sm",
+        lg: "h-11 text-sm",
       },
       state: {
-        normal: "border-border",
-        invalid: "border-method-delete focus-within:border-method-delete",
+        normal: "border-border/70",
+        invalid:
+          "border-method-delete/60 focus-within:border-method-delete",
       },
     },
     defaultVariants: { size: "md", state: "normal" },
@@ -30,9 +32,27 @@ const fieldStyles = cva(
 );
 
 const padBySize = {
-  sm: { left: "pl-7", right: "pr-7", iconL: "left-2", iconR: "right-2", iconSize: "h-3 w-3" },
-  md: { left: "pl-8", right: "pr-8", iconL: "left-2.5", iconR: "right-2.5", iconSize: "h-3.5 w-3.5" },
-  lg: { left: "pl-10", right: "pr-10", iconL: "left-3", iconR: "right-3", iconSize: "h-4 w-4" },
+  sm: {
+    left: "pl-7",
+    right: "pr-7",
+    iconL: "left-2",
+    iconR: "right-2",
+    iconSize: "h-3 w-3",
+  },
+  md: {
+    left: "pl-9",
+    right: "pr-8",
+    iconL: "left-2.5",
+    iconR: "right-2.5",
+    iconSize: "h-3.5 w-3.5",
+  },
+  lg: {
+    left: "pl-10",
+    right: "pr-10",
+    iconL: "left-3",
+    iconR: "right-3",
+    iconSize: "h-4 w-4",
+  },
 } as const;
 
 /**

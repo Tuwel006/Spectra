@@ -44,7 +44,10 @@ export interface FormFieldRowProps {
 }
 
 const INPUT_CLASS =
-  "h-7 w-full rounded-sm border border-border/60 bg-bg-base px-2 text-[12px] text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40";
+  "h-8 w-full rounded-md border border-border/70 bg-bg-base px-2.5 text-[12px] leading-tight text-text-primary placeholder:text-text-muted/80 transition-colors duration-150 hover:border-border/90 focus:border-accent/70 focus:bg-bg-base focus:outline-none focus:ring-2 focus:ring-accent/20";
+
+const ROW_CLASS =
+  "grid items-center gap-2 rounded-lg border border-border/60 bg-bg-base px-2.5 py-1.5 transition-colors duration-150 hover:border-border/80 hover:bg-bg-subtle/40";
 
 export function FormFieldRow({
   enabled,
@@ -75,7 +78,7 @@ export function FormFieldRow({
   return (
     <div
       className={cn(
-        "grid items-center gap-2 rounded-sm border border-border/60 bg-bg-base px-2 py-1.5",
+        ROW_CLASS,
         enabled === false && "opacity-60",
       )}
       style={{ gridTemplateColumns: cols.join(" ") }}
@@ -155,7 +158,7 @@ export function FormFieldRow({
 
 function TypeBadge({ type }: { type: string }): React.ReactElement {
   return (
-    <span className="inline-flex h-6 items-center justify-center rounded-sm border border-border bg-bg-muted px-1.5 font-mono text-[10px] uppercase tracking-wider text-text-secondary">
+    <span className="inline-flex h-6 items-center justify-center rounded-md border border-border/70 bg-bg-muted px-2 font-mono text-[10px] uppercase tracking-wider text-text-secondary">
       {type}
     </span>
   );
@@ -173,9 +176,9 @@ export function FormEmptyState({
   description: string;
 }): React.ReactElement {
   return (
-    <div className="flex flex-col items-center gap-1 rounded-sm border border-dashed border-border bg-bg-subtle px-4 py-8 text-center">
+    <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border/70 bg-bg-subtle/60 px-4 py-8 text-center">
       <p className="text-xs font-medium text-text-secondary">{title}</p>
-      <p className="text-[11px] text-text-muted">{description}</p>
+      <p className="text-[11px] text-text-muted/90">{description}</p>
     </div>
   );
 }
@@ -191,7 +194,7 @@ export function FormColumnHeader({
 }): React.ReactElement {
   return (
     <div
-      className="grid items-center gap-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted"
+      className="grid items-center gap-2 px-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-muted/80"
       style={{ gridTemplateColumns: columns.map((c) => c.width).join(" ") }}
     >
       {columns.map((c) => (
