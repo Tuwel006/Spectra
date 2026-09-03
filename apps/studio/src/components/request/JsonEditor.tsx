@@ -7,6 +7,7 @@ import { AlertCircle, CheckCircle2, Copy, Eraser, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
+import { JsonViewPanel } from "@/components/ui/json-view";
 
 const MonacoEditor = dynamic(
   () => import("@monaco-editor/react").then((m) => m.default),
@@ -19,9 +20,15 @@ const MonacoEditor = dynamic(
  * <p>
  *   The editor itself is loaded via `next/dynamic` (ssr: false) so the
  *   Monaco worker doesn't try to boot inside the Next.js server bundle
- *   and clutter the build. SSR fallback is a plain `<textarea>` so the
- *   layout stays stable until Monaco loads.
+ *   and clutter the build. SSR fallback is a syntax-highlighted
+ *   preview via the shared `JsonViewPanel` so the layout stays
+ *   stable until Monaco loads.
  * </p>
+ *
+ * <p>The toolbar mirrors the conventions used by other request-body
+ * editors in the studio: a left-aligned validity chip, a right-aligned
+ * action group with `Format · Copy · Clear`. All three actions share
+ * the same small button style.</p>
  */
 export function JsonEditor({
   value,
@@ -48,10 +55,16 @@ export function JsonEditor({
     }
   };
 
+  const parsed = validation.kind === "ok" ? validation.value : undefined;
+
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-2 border-b border-border bg-bg-muted px-3 py-1.5">
-        <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+    <div
+      className={cn(
+        "flex h-full flex-col overflow-hidden rounded-md border border-border/70 bg-bg-base",
+      )}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/70 bg-bg-subtle/60 px-3.5 py-1.5">
+        <div className="inline-flex min-w-0 items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-muted">
           <span>JSON</span>
           {validation.kind === "ok" ? (
             <span className="inline-flex items-center gap-1 text-status-2xx">
@@ -66,16 +79,18 @@ export function JsonEditor({
             </span>
           ) : null}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           <Tooltip content="Format JSON">
             <Button
               variant="ghost"
               size="icon"
               aria-label="Format JSON"
               onClick={() => {
-                if (validation.kind === "ok") onChange(JSON.stringify(validation.value, null, 2));
+                if (validation.kind === "ok")
+                  onChange(JSON.stringify(validation.value, null, 2));
               }}
               disabled={validation.kind !== "ok"}
+              className="h-7 w-7 text-text-muted hover:bg-bg-muted hover:text-text-primary"
             >
               <Sparkles className="h-3.5 w-3.5" />
             </Button>
@@ -86,6 +101,7 @@ export function JsonEditor({
               size="icon"
               aria-label="Copy JSON"
               onClick={copy}
+              className="h-7 w-7 text-text-muted hover:bg-bg-muted hover:text-text-primary"
             >
               <Copy className="h-3.5 w-3.5" />
             </Button>
@@ -97,6 +113,7 @@ export function JsonEditor({
               aria-label="Clear body"
               onClick={() => onChange("")}
               disabled={readOnly || value.length === 0}
+              className="h-7 w-7 text-text-muted hover:bg-bg-muted hover:text-text-primary"
             >
               <Eraser className="h-3.5 w-3.5" />
             </Button>
@@ -104,7 +121,7 @@ export function JsonEditor({
         </div>
       </div>
 
-      <div className={cn("flex-1", mounted ? "" : "p-2")}>
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-bg-base">
         {mounted ? (
           <MonacoEditor
             height="100%"
@@ -118,26 +135,28 @@ export function JsonEditor({
               lineNumbers: "on",
               wordWrap: "on",
               fontSize: 12,
-              fontFamily: "var(--font-geist-mono), monospace",
+              fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
+              fontLigatures: true,
               tabSize: 2,
               automaticLayout: true,
               scrollBeyondLastLine: false,
               renderLineHighlight: "gutter",
-              padding: { top: 12, bottom: 12 },
+              padding: { top: 14, bottom: 14 },
+              bracketPairColorization: { enabled: true },
+              guides: { indentation: false, bracketPairs: false },
+              smoothScrolling: true,
+              cursorBlinking: "smooth",
+              roundedSelection: false,
+              renderValidationDecorations: "on",
+              lineDecorationsWidth: 8,
+              lineNumbersMinChars: 3,
+              tabFocusMode: false,
             }}
           />
         ) : (
-          <textarea
-            value={value}
-            onChange={(e) => onChange(e.currentTarget.value)}
-            disabled={readOnly}
-            spellCheck={false}
-            aria-label="JSON body"
-            className={cn(
-              "h-full w-full resize-none rounded-md bg-[#1e1e1e] p-3 font-mono text-xs text-text-primary",
-              "focus:outline-none",
-            )}
-          />
+          <div className="h-full">
+            <JsonViewPanel value={parsed ?? ""} className="h-full border-0" />
+          </div>
         )}
       </div>
     </div>
