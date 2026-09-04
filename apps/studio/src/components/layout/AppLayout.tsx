@@ -111,6 +111,16 @@ function AppLayoutShell({
     >
       <TopBar />
 
+      {/* Right AI Assistant renders as an OVERLAY drawer so
+          it never consumes workspace horizontal room. The toggle
+          lives in the top header (TopBar). It is mounted at the
+          AppLayout root level (NOT inside the workspace Panel)
+          so its `position: fixed` is scoped to the viewport —
+          `react-resizable-panels` applies CSS transforms to
+          panels during drag, which would otherwise re-scope any
+          `fixed` descendant to that panel. */}
+      <RootRightDrawer open={!layout.rightCollapsed} />
+
       <Group
         orientation="vertical"
         className="flex-1 overflow-hidden"
@@ -158,14 +168,6 @@ function AppLayoutShell({
                   onToggle={layout.toggleLeft}
                 />
               ) : null}
-
-              {/* Right AI Assistant renders as an OVERLAY drawer so
-                  it never consumes workspace horizontal room. The
-                  toggle lives in the top header. */}
-              <RightDrawerOverlay
-                open={!layout.rightCollapsed}
-                onToggle={layout.toggleRight}
-              />
             </Panel>
           </Group>
         </Panel>
@@ -191,7 +193,7 @@ function AppLayoutShell({
 }
 
 /* ------------------------------------------------------------------ */
-/* Right AI Assistant drawer overlay                                  */
+/* Right AI Assistant drawer overlay (mounted at AppLayout root)         */
 /* ------------------------------------------------------------------ */
 
 /**
@@ -200,22 +202,27 @@ function AppLayoutShell({
  * workspace's horizontal room; the toggle button lives in the top
  * header (TopBar) so it's always reachable.
  *
+ * Why mounted at the AppLayout root: `react-resizable-panels`
+ * applies CSS transforms to its `Panel` components (especially
+ * during drag). A `position: fixed` element nested inside such a
+ * Panel gets re-scoped to that Panel — losing the "fixed to
+ * viewport" behaviour. Mounting the drawer at the AppLayout level
+ * avoids that pitfall entirely.
+ *
  * z-index layout:
- *   • drawer panel    — z-30
+ *   • drawer panel    — z-50
+ *   • TopBar          — z-60  (so toggle stays reachable above the drawer)
  *   • workspace       — normal flow
- *   • toggle button   — lives in TopBar (separate concern)
  */
-function RightDrawerOverlay({
+function RootRightDrawer({
   open,
-  onToggle,
 }: {
   open: boolean;
-  onToggle: () => void;
 }): React.ReactElement {
   return (
     <div
       className={cn(
-        "pointer-events-none fixed inset-y-0 right-0 z-30 w-[320px] max-w-[85vw] border-l border-border bg-bg-subtle shadow-2xl",
+        "pointer-events-none fixed inset-y-0 right-0 z-[50] w-[320px] max-w-[85vw] border-l border-border bg-bg-subtle shadow-2xl",
         "transition-transform duration-200 ease-out",
         open ? "translate-x-0" : "translate-x-full",
       )}
