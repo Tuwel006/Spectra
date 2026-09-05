@@ -1,14 +1,112 @@
-import { MethodQuery } from "@spectra/provider-ast";
+import {
+    DecoratorReader,
+    DecoratorArguments,
+} from "../utils";
+import {
+    ExpressionInspector,
+    MethodQuery,
+    NodeWalker,
+    ParameterQuery,
+    SymbolResolver,
+    TypeResolver,
+    DeclarationResolver,
+} from "@spectra/provider-ast";
 
 import { ControllerMetadata, RouteMetadata } from "../metadata";
-import { DecoratorReader } from "../utils";
+import { composeRoutePath } from "../semantic/route-composition";
+import {
+    FilterSourceExtractor,
+    GuardSourceExtractor,
+    InterceptorSourceExtractor,
+    PipeSourceExtractor,
+} from "../semantic/decorator-arg";
+import { HttpMetadataExtractor } from "../semantic/http-metadata";
+import { RouteMethodExtractor } from "../semantic/route-method";
+import { RoutePathExtractor } from "../semantic/route-path";
+import { ParameterSourceExtractor } from "../semantic/parameter-source";
+import { ParameterTypeExtractor } from "../semantic/parameter-type";
 
 export class RouteAnalyzer {
 
+    private readonly methodExtractor: RouteMethodExtractor;
+    private readonly parameterExtractor: ParameterSourceExtractor;
+    private readonly parameterQuery: ParameterQuery;
+    private readonly guardExtractor: GuardSourceExtractor;
+    private readonly pipeExtractor: PipeSourceExtractor;
+    private readonly interceptorExtractor: InterceptorSourceExtractor;
+    private readonly filterExtractor: FilterSourceExtractor;
+    private readonly httpMetadataExtractor: HttpMetadataExtractor;
+
     public constructor(
         private readonly methodQuery: MethodQuery,
-        private readonly decoratorReader: DecoratorReader,
-    ) { }
+        decoratorReader: DecoratorReader,
+        decoratorArguments?: DecoratorArguments,
+        inspector?: ExpressionInspector,
+        typeResolver?: TypeResolver,
+        symbolResolver?: SymbolResolver,
+        declarationResolver?: DeclarationResolver,
+        methodExtractor?: RouteMethodExtractor,
+        parameterExtractor?: ParameterSourceExtractor,
+    ) {
+        const _decoratorArguments =
+            decoratorArguments ?? new DecoratorArguments();
+        const _inspector = inspector ?? new ExpressionInspector();
+        this.methodExtractor =
+            methodExtractor ??
+            new RouteMethodExtractor(
+                decoratorReader,
+                new RoutePathExtractor(
+                    _decoratorArguments,
+                    _inspector,
+                ),
+            );
+        this.parameterExtractor =
+            parameterExtractor ??
+            new ParameterSourceExtractor(
+                decoratorReader,
+                _decoratorArguments,
+                _inspector,
+                new ParameterTypeExtractor(typeResolver),
+            );
+        this.guardExtractor = new GuardSourceExtractor(
+            decoratorReader,
+            _decoratorArguments,
+            _inspector,
+            symbolResolver,
+            declarationResolver,
+        );
+        this.pipeExtractor = new PipeSourceExtractor(
+            decoratorReader,
+            _decoratorArguments,
+            _inspector,
+            symbolResolver,
+            declarationResolver,
+        );
+        this.interceptorExtractor = new InterceptorSourceExtractor(
+            decoratorReader,
+            _decoratorArguments,
+            _inspector,
+            symbolResolver,
+            declarationResolver,
+        );
+        this.filterExtractor = new FilterSourceExtractor(
+            decoratorReader,
+            _decoratorArguments,
+            _inspector,
+            symbolResolver,
+            declarationResolver,
+        );
+        this.httpMetadataExtractor = new HttpMetadataExtractor(
+            decoratorReader,
+            _decoratorArguments,
+            _inspector,
+            symbolResolver,
+            declarationResolver,
+        );
+        this.parameterQuery = new ParameterQuery(
+            new NodeWalker(),
+        );
+    }
 
     public analyze(
         controller: ControllerMetadata,
@@ -23,57 +121,80 @@ export class RouteAnalyzer {
 
         for (const methodNode of methods) {
 
-            const httpMethod =
-                this.getHttpMethod(methodNode);
-
-            if (!httpMethod) {
+            const views = this.methodExtractor.extract(methodNode);
+            if (views.length === 0) {
                 continue;
             }
 
-            routes.push({
+            for (const view of views) {
 
-                name:
-                    methodNode.name.getText(),
+                const composedPath = composeRoutePath(
+                    controller.normalizedPath,
+                    view.normalizedPath,
+                );
 
-                path: "",
+                const parameters = this.parameterQuery
+                    .execute(methodNode)
+                    .map((p, i) =>
+                        this.parameterExtractor.extract(p, i),
+                    );
 
-                method: httpMethod,
+                const guards = this.guardExtractor.extract(methodNode);
+                const pipes = this.pipeExtractor.extract(methodNode);
+                const interceptors =
+                    this.interceptorExtractor.extract(methodNode);
+                const filters = this.filterExtractor.extract(methodNode);
+                const httpMeta = this.httpMetadataExtractor.extract(methodNode);
 
-                methodNode,
+                routes.push({
 
-            });
+                    name: methodNode.name.getText(),
+
+                    decoratorName: view.decoratorName,
+
+                    decoratorIndex: view.decoratorIndex,
+
+                    method: view.httpMethod,
+
+                    sourcePath: view.sourcePath,
+
+                    path: view.normalizedPath,
+
+                    normalizedPath: view.normalizedPath,
+
+                    routePathValue: view.value,
+
+                    routeExpressionKind: view.expressionKind,
+
+                    isStatic: view.isStatic,
+
+                    composedPath,
+
+                    parameters,
+
+                    guards,
+
+                    pipes,
+
+                    interceptors,
+
+                    filters,
+
+                    httpCode: httpMeta.httpCode,
+
+                    headers: httpMeta.headers,
+
+                    redirect: httpMeta.redirect,
+
+                    methodNode,
+
+                });
+
+            }
 
         }
 
         return routes;
-
-    }
-
-    private getHttpMethod(
-        methodNode: import("typescript").MethodDeclaration,
-    ) {
-
-        if (this.decoratorReader.has(methodNode, "Get")) {
-            return "GET";
-        }
-
-        if (this.decoratorReader.has(methodNode, "Post")) {
-            return "POST";
-        }
-
-        if (this.decoratorReader.has(methodNode, "Put")) {
-            return "PUT";
-        }
-
-        if (this.decoratorReader.has(methodNode, "Patch")) {
-            return "PATCH";
-        }
-
-        if (this.decoratorReader.has(methodNode, "Delete")) {
-            return "DELETE";
-        }
-
-        return undefined;
 
     }
 

@@ -8,7 +8,7 @@ const inspector =
 
 const source = ts.createSourceFile(
     "test.ts",
-    `
+    String.raw`
         const a = "users";
 
         const b = 201;
@@ -36,6 +36,28 @@ const source = ts.createSourceFile(
         const l = function(value) {
             return value.trim();
         };
+
+        const m = -10;
+
+        const n = values["key"];
+
+        const p = "users/" + "x";
+
+        const q = /abc/;
+
+        const r = new Foo();
+
+        const s = cond ? a : b;
+
+        const t = "a" + "b";
+
+        const u = value++;
+
+        const v = value as string;
+
+        const w = [...guards];
+
+        const x = typeof value;
     `,
     ts.ScriptTarget.Latest,
     true,

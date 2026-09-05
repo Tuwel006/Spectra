@@ -1,15 +1,76 @@
 import ts from "typescript";
-import { ClassQuery } from "@spectra/provider-ast";
+import {
+    ClassQuery,
+    DeclarationResolver,
+    ExpressionInspector,
+    SymbolResolver,
+} from "@spectra/provider-ast";
 
 import { ControllerMetadata } from "../metadata";
-import { DecoratorReader } from "../utils";
+import {
+    ControllerPathExtractor,
+} from "../semantic/controller-path";
+import {
+    FilterSourceExtractor,
+    GuardSourceExtractor,
+    InterceptorSourceExtractor,
+    PipeSourceExtractor,
+} from "../semantic/decorator-arg";
+import { DecoratorArguments, DecoratorReader } from "../utils";
 
 export class ControllerAnalyzer {
 
+    private readonly pathExtractor: ControllerPathExtractor;
+    private readonly guardExtractor: GuardSourceExtractor;
+    private readonly pipeExtractor: PipeSourceExtractor;
+    private readonly interceptorExtractor: InterceptorSourceExtractor;
+    private readonly filterExtractor: FilterSourceExtractor;
+
     public constructor(
         private readonly classQuery: ClassQuery,
-        private readonly decoratorReader: DecoratorReader,
-    ) { }
+        decoratorReader: DecoratorReader,
+        decoratorArguments?: DecoratorArguments,
+        inspector?: ExpressionInspector,
+        symbolResolver?: SymbolResolver,
+        declarationResolver?: DeclarationResolver,
+    ) {
+        const _decoratorArguments =
+            decoratorArguments ?? new DecoratorArguments();
+        const _inspector = inspector ?? new ExpressionInspector();
+        this.pathExtractor = new ControllerPathExtractor(
+            decoratorReader,
+            _decoratorArguments,
+            _inspector,
+        );
+        this.guardExtractor = new GuardSourceExtractor(
+            decoratorReader,
+            _decoratorArguments,
+            _inspector,
+            symbolResolver,
+            declarationResolver,
+        );
+        this.pipeExtractor = new PipeSourceExtractor(
+            decoratorReader,
+            _decoratorArguments,
+            _inspector,
+            symbolResolver,
+            declarationResolver,
+        );
+        this.interceptorExtractor = new InterceptorSourceExtractor(
+            decoratorReader,
+            _decoratorArguments,
+            _inspector,
+            symbolResolver,
+            declarationResolver,
+        );
+        this.filterExtractor = new FilterSourceExtractor(
+            decoratorReader,
+            _decoratorArguments,
+            _inspector,
+            symbolResolver,
+            declarationResolver,
+        );
+    }
 
     public analyze(
         sourceFile: ts.SourceFile,
@@ -21,15 +82,30 @@ export class ControllerAnalyzer {
 
         for (const classNode of classes) {
 
-            if (!this.decoratorReader.has(classNode, "Controller")) {
+            const pathView = this.pathExtractor.extract(classNode);
+            if (pathView.expressionKind === "<no-decorator>") {
                 continue;
             }
 
+            const classGuards = this.guardExtractor.extract(classNode);
+            const classPipes = this.pipeExtractor.extract(classNode);
+            const classInterceptors =
+                this.interceptorExtractor.extract(classNode);
+            const classFilters = this.filterExtractor.extract(classNode);
+
             controllers.push({
                 name: classNode.name?.text ?? "Anonymous",
-                path: "",
+                path: pathView.normalized,
+                sourcePath: pathView.sourceText,
+                normalizedPath: pathView.normalized,
+                controllerExpressionKind: pathView.expressionKind,
+                controllerPathValue: pathView.value,
                 classNode,
                 tags: [],
+                classGuards,
+                classPipes,
+                classInterceptors,
+                classFilters,
                 routes: [],
             });
 

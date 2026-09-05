@@ -7,11 +7,22 @@ export type ExpressionKind =
     | "null"
     | "identifier"
     | "property-access"
+    | "element-access"
     | "call"
     | "object"
     | "array"
     | "arrow-function"
     | "function"
+    | "prefix-unary"
+    | "template"
+    | "regex"
+    | "new"
+    | "conditional"
+    | "binary"
+    | "postfix-unary"
+    | "as-expression"
+    | "spread"
+    | "class"
     | "unknown";
 
 export interface ExpressionInfo {
@@ -35,6 +46,24 @@ export class ExpressionInspector {
         if (ts.isNumericLiteral(expression)) {
             return {
                 kind: "number",
+                node: expression,
+            };
+        }
+
+        if (ts.isPrefixUnaryExpression(expression)) {
+            return {
+                kind: "prefix-unary",
+                node: expression,
+            };
+        }
+
+        if (
+            ts.isTypeOfExpression(expression) ||
+            ts.isVoidExpression(expression) ||
+            ts.isDeleteExpression(expression)
+        ) {
+            return {
+                kind: "prefix-unary",
                 node: expression,
             };
         }
@@ -72,6 +101,13 @@ export class ExpressionInspector {
             };
         }
 
+        if (ts.isElementAccessExpression(expression)) {
+            return {
+                kind: "element-access",
+                node: expression,
+            };
+        }
+
         if (ts.isCallExpression(expression)) {
             return {
                 kind: "call",
@@ -103,6 +139,83 @@ export class ExpressionInspector {
         if (ts.isFunctionExpression(expression)) {
             return {
                 kind: "function",
+                node: expression,
+            };
+        }
+
+        if (ts.isNoSubstitutionTemplateLiteral(expression)) {
+            return {
+                kind: "template",
+                node: expression,
+            };
+        }
+
+        if (ts.isTemplateExpression(expression)) {
+            return {
+                kind: "template",
+                node: expression,
+            };
+        }
+
+        if (ts.isRegularExpressionLiteral(expression)) {
+            return {
+                kind: "regex",
+                node: expression,
+            };
+        }
+
+        if (ts.isNewExpression(expression)) {
+            return {
+                kind: "new",
+                node: expression,
+            };
+        }
+
+        if (ts.isConditionalExpression(expression)) {
+            return {
+                kind: "conditional",
+                node: expression,
+            };
+        }
+
+        if (ts.isBinaryExpression(expression)) {
+            return {
+                kind: "binary",
+                node: expression,
+            };
+        }
+
+        if (ts.isPostfixUnaryExpression(expression)) {
+            return {
+                kind: "postfix-unary",
+                node: expression,
+            };
+        }
+
+        if (ts.isAsExpression(expression)) {
+            return {
+                kind: "as-expression",
+                node: expression,
+            };
+        }
+
+        if (ts.isTypeAssertionExpression(expression)) {
+            return {
+                kind: "as-expression",
+                node: expression,
+            };
+        }
+
+        if (ts.isNonNullExpression(expression)) {
+            return {
+                kind: "as-expression",
+                node: expression,
+            };
+        }
+
+        if (ts.isClassExpression(expression)) {
+            return {
+                kind: "class",
                 node: expression,
             };
         }
