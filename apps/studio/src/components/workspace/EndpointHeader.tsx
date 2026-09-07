@@ -2,13 +2,15 @@
 
 import * as React from "react";
 import {
-  AlertTriangle,
   Check,
   Copy,
   Link2,
   Pin,
+  Plus,
+  RotateCcw,
   Send,
   Share2,
+  X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -21,11 +23,9 @@ import { cn } from "@/lib/cn";
 import { mockDocumentation } from "@/mock/documentation";
 import type { Operation } from "@spectra/core";
 
-import { useRequestDraftStore } from "@/components/request";
-
 import { useWorkspace } from "./hooks/useWorkspace";
-import { readOperationTagsAndAuth } from "./EndpointOverview";
 import { useEndpointUrl } from "./useEndpointUrl";
+import { useUrlStore } from "./urlStore";
 import { syncUrlToDraft } from "./urlDraftSync";
 
 /* ------------------------------------------------------------------ */
@@ -36,16 +36,19 @@ import { syncUrlToDraft } from "./urlDraftSync";
  * The endpoint header sits at the top of the workspace page. It exposes
  * everything the spec calls for:
  *
- *   • Method badge + server selector + URL input + Run button
- *     (Postman-style row)
- *   • Copy URL, Pin, Share actions
- *   • Summary, description, Tags, Authentication, Operation ID
- *   • Deprecated badge
+ *   • Server dropdown + "+ Custom URL" toggle (controlled writes to
+ *     the URL store; selecting a server updates the URL bar's server
+ *     chip in real time).
+ *   • Copy URL, Pin, Share actions.
+ *   • URL bar split into two visually-distinct segments:
+ *       [method] [server base — read-only chip] [path + endpoints —
+ *       editable input]
+ *   • Send button (disabled — execution lands in a later phase).
  *
- * The URL input is live-derived from the request draft. Typing into
- * the path / query params updates the URL automatically; editing the
- * URL input directly writes back to the path / query params so the
- * two surfaces stay in sync.
+ * The URL bar's path/endpoint input is live-derived from the request
+ * draft, while the server base is derived from the URL store. Editing
+ * either surface writes back to the appropriate store so the path-param
+ * table, query-param table, and the URL bar itself stay in sync.
  */
 export function EndpointHeader({
   operation,
@@ -54,7 +57,18 @@ export function EndpointHeader({
 }): React.ReactElement {
   const { activeTab, togglePin } = useWorkspace();
   const isPinned = activeTab?.pinned ?? false;
-  const { url, path, serverUrl } = useEndpointUrl(operation);
+  const { url, path, serverUrl, isCustom, serverLabel } = useEndpointUrl(operation);
+
+  // URL store wiring — controlled inputs write back into the store on
+  // every change. We keep the read-side fields memoised via the store
+  // selectors here so React can bail out when nothing changed.
+  const selectedServerId = useUrlStore(
+    (s) => s.selectedServerId ?? mockDocumentation.servers[0]?.id,
+  );
+  const customServerUrl = useUrlStore((s) => s.customServerUrl);
+  const setSelectedServer = useUrlStore((s) => s.setSelectedServer);
+  const setCustomServerUrl = useUrlStore((s) => s.setCustomServerUrl);
+  const resetServer = useUrlStore((s) => s.resetServer);
 
   const [copied, setCopied] = React.useState(false);
   const handleCopy = React.useCallback(async () => {
@@ -67,25 +81,78 @@ export function EndpointHeader({
     }
   }, [url]);
 
-  const meta = readOperationTagsAndAuth(operation);
-  const method = operation.method;
   const serverOptions = mockDocumentation.servers.map((s) => ({
     value: s.id,
     label: s.name ?? s.url,
   }));
 
+  // Custom URL row — collapsed by default. Clicking "+ Custom" expands
+  // an inline editor that writes to `customServerUrl` and overrides
+  // the dropdown selection. Initial state mirrors whatever the store
+  // already has (e.g. user restored a session with a custom URL set),
+  // so opening the page never strands them with a hidden editor.
+  const [showCustom, setShowCustom] = React.useState(Boolean(customServerUrl));
+
+  const handleOpenCustom = React.useCallback(() => {
+    // If we have no custom URL yet, prefilled it with the current
+    // server's URL so the user can edit it inline rather than starting
+    // from an empty string. If they save without changing anything the
+    // store de-dupes and returns the same state (see urlStore).
+    if (!customServerUrl) {
+      setCustomServerUrl(serverUrl);
+    }
+    setShowCustom(true);
+  }, [customServerUrl, serverUrl, setCustomServerUrl]);
+
+  const handleResetServer = React.useCallback(() => {
+    resetServer();
+    setShowCustom(false);
+  }, [resetServer]);
+
   return (
     <div className="flex flex-col gap-3 border-b border-border bg-bg-subtle px-6 py-4">
-      {/* Row 1: Server dropdown (left) | Copy / Pin / Share (right) */}
+      {/* Row 1: Server dropdown + "+ Custom URL" (left) | Copy / Pin / Share (right) */}
       <div className="flex flex-nowrap items-center gap-2">
         <Select
           size="sm"
           className="min-w-[180px]"
-          defaultValue={serverOptions[0]?.value}
+          value={selectedServerId}
+          onChange={(e) => {
+            // Picking a docs server also clears any custom override —
+            // the dropdown is the "documented" surface, the custom
+            // input is the "override" surface, and they don't stack.
+            setSelectedServer(e.currentTarget.value);
+          }}
           options={serverOptions}
           aria-label="Server"
           leadingIcon={<Link2 className="h-3.5 w-3.5" aria-hidden="true" />}
         />
+
+        <Tooltip
+          content={
+            isCustom && customServerUrl
+              ? "Custom URL active — click to edit"
+              : "Add a custom base URL"
+          }
+          side="bottom"
+        >
+          <Button
+            variant={isCustom ? "primary" : "outline"}
+            size="sm"
+            onClick={handleOpenCustom}
+            aria-label="Add custom URL"
+            className="h-7 gap-1.5"
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            <span>Custom URL</span>
+          </Button>
+        </Tooltip>
+
+        {isCustom && customServerUrl ? (
+          <Badge tone="accent" size="sm" className="font-mono">
+            Custom active
+          </Badge>
+        ) : null}
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <Tooltip content={copied ? "Copied!" : "Copy URL"} side="bottom">
@@ -147,17 +214,93 @@ export function EndpointHeader({
         </div>
       </div>
 
-      {/* Row 2: Method | URL input | Send */}
+      {/* Row 1b: Custom URL editor — only rendered when the user
+          expands it. Writes through to the URL store, so the URL bar's
+          server chip updates in real time as the user types. */}
+      {showCustom ? (
+        <CustomUrlRow
+          value={customServerUrl ?? ""}
+          onChange={(next) => setCustomServerUrl(next)}
+          onReset={handleResetServer}
+          onClose={() => setShowCustom(false)}
+        />
+      ) : null}
+
+      {/* Row 2: Method | Server URL segment | Path + endpoints segment | Send */}
       <UrlBar
-        method={method}
+        method={operation.method}
         url={url}
         path={path}
         serverUrl={serverUrl}
+        serverLabel={serverLabel}
+        isCustom={isCustom}
         endpointId={operation.id}
       />
+    </div>
+  );
+}
 
-      {/* Summary / description / metadata now live in the right-side
-          Properties drawer. Header is intentionally chrome-only. */}
+/* ------------------------------------------------------------------ */
+/* Custom URL editor                                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Inline editor for the user-typed base URL. Hidden by default; the
+ * "+ Custom URL" button above reveals it. A "reset" action clears the
+ * custom value (returning to the dropdown-picked server) and an "X"
+ * collapses the row without clearing the value — useful for swapping
+ * servers quickly without losing the override.
+ */
+function CustomUrlRow({
+  value,
+  onChange,
+  onReset,
+  onClose,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  onReset: () => void;
+  onClose: () => void;
+}): React.ReactElement {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-accent/40 bg-bg-base px-2 py-1.5">
+      <Link2 className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden />
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+        Custom
+      </span>
+      <Input
+        size="sm"
+        value={value}
+        onChange={(e) => onChange(e.currentTarget.value)}
+        placeholder="https://my-mock.example.com"
+        spellCheck={false}
+        autoComplete="off"
+        aria-label="Custom base URL"
+        className="font-mono"
+        wrapperClassName="min-h-0 h-7 flex-1"
+      />
+      <Tooltip content="Reset to the selected server" side="bottom">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onReset}
+          aria-label="Reset to selected server"
+          className="h-7 w-7 text-text-secondary"
+        >
+          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+        </Button>
+      </Tooltip>
+      <Tooltip content="Hide editor" side="bottom">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          aria-label="Hide custom URL editor"
+          className="h-7 w-7 text-text-secondary"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden />
+        </Button>
+      </Tooltip>
     </div>
   );
 }
@@ -167,58 +310,81 @@ export function EndpointHeader({
 /* ------------------------------------------------------------------ */
 
 /**
- * Method + Server + URL + Run row.
+ * Method + Server base + Path/endpoints + Send row.
  *
- * `url` is the live, fully-substituted URL (see `useEndpointUrl`). The
- * input is a controlled view over it — when the user types into the
- * input we re-parse the value and split the edits between the path
- * template (uncovered) and the query string. The result is that the
- * URL field shows the rendered URL while the draft store still owns
- * the canonical source of truth.
+ * Visual split — three segments inside one connected control:
+ *   1. **Method** — coloured MethodBadge on the left.
+ *   2. **Server base** — read-only-ish chip showing the active
+ *      server's URL (or "Custom" pill). Tint differs from the path
+ *      segment to signal "this came from the picker, don't type here".
+ *   3. **Path + endpoints** — editable `<Input>` holding the
+ *      rendered path with `{var}` interpolations and the query
+ *      string. Editing this surface pipes through `syncUrlToDraft`
+ *      so the path-param table and query-param table stay in sync.
+ *
+ * The server chip derives from the URL store; the path input derives
+ * from the request draft. Joining them is purely cosmetic.
  */
 function UrlBar({
   method,
   url,
   path,
   serverUrl,
+  serverLabel,
+  isCustom,
   endpointId,
 }: {
   method: Operation["method"];
   url: string;
   path: string;
   serverUrl: string;
+  serverLabel: string;
+  isCustom: boolean;
   endpointId: string;
 }): React.ReactElement {
-  const [draftUrl, setDraftUrl] = React.useState(url);
+  // The path input holds everything AFTER the server base — i.e. the
+  // interpolated path template plus `?…` query. Stripping the base
+  // here mirrors the same logic `urlDraftSync` uses on the write side,
+  // so the input is the inverse projection of the composed URL.
+  const base = React.useMemo(
+    () => stripTrailingSlash(serverUrl),
+    [serverUrl],
+  );
+  const renderedTail = React.useMemo(() => {
+    if (url.startsWith(base)) return url.slice(base.length);
+    // Fallback: the composed URL doesn't start with the active base
+    // (rare — usually means the draft was hand-edited to a totally
+    // different server). Show the full URL in the path segment so the
+    // user sees what we'd actually send.
+    return url;
+  }, [url, base]);
 
-  // Keep the input in sync when the live URL changes from the draft
-  // (typing in path / query params) — but only when the input isn't
-  // currently being edited. We use the React-recommended derived
-  // state pattern instead of a useEffect to avoid cascading renders.
   const [editing, setEditing] = React.useState(false);
-  const [prevUrl, setPrevUrl] = React.useState(url);
-  if (prevUrl !== url) {
-    setPrevUrl(url);
-    if (!editing) setDraftUrl(url);
+  const [draftTail, setDraftTail] = React.useState(renderedTail);
+  const [prevTail, setPrevTail] = React.useState(renderedTail);
+  // Derived-state pattern: keep the input in sync when the upstream
+  // URL changes (typing in path-param table, query-param table, or
+  // changing the server via the dropdown), but never while the user
+  // is actively editing this field.
+  if (prevTail !== renderedTail) {
+    setPrevTail(renderedTail);
+    if (!editing) setDraftTail(renderedTail);
   }
 
   const handleChange = React.useCallback(
     (next: string) => {
-      setDraftUrl(next);
-      // Best-effort sync: parse the input back into the draft.
-      syncUrlToDraft(next, serverUrl, path, endpointId);
+      setDraftTail(next);
+      // Re-compose the full URL and feed it to the shared sync helper
+      // so path-param and query-param tables pick up the edits.
+      const fullUrl = `${base}${next}`;
+      syncUrlToDraft(fullUrl, serverUrl, path, endpointId);
     },
-    [serverUrl, path, endpointId],
+    [base, serverUrl, path, endpointId],
   );
 
-  // Single-row layout — Method · URL · Send. The URL input grows to
-  // fill the remaining space but never below ~280px so very long
-  // paths stay readable without forcing the row to wrap. Method and
-  // URL share a connected border so they read as one control; the
-  // Send button sits in its own slot with a clear gap.
   return (
     <div className="flex flex-nowrap items-stretch gap-2.5">
-      {/* Connected method + URL control */}
+      {/* Connected method + server + path control */}
       <div
         className={cn(
           "group flex min-w-[280px] flex-1 items-stretch overflow-hidden rounded-md border border-border bg-bg-base transition-colors",
@@ -230,15 +396,33 @@ function UrlBar({
           size="md"
           className="h-9 shrink-0 rounded-none border-0 border-r border-border bg-bg-subtle px-2.5 text-text-primary group-focus-within:border-accent"
         />
+
+        {/* Server base — read-only display chip. Distinct background
+            so users can immediately see which part of the URL is
+            controlled by the picker above. */}
+        <div
+          className={cn(
+            "flex h-9 shrink-0 items-center gap-1.5 border-r border-border bg-bg-muted px-2.5 font-mono text-xs",
+            isCustom ? "text-accent" : "text-text-secondary",
+          )}
+          title={isCustom ? "Custom base URL" : `Server: ${serverLabel}`}
+          aria-label={isCustom ? "Custom base URL" : `Server ${serverLabel}`}
+        >
+          <Link2 className="h-3 w-3 shrink-0 text-text-muted" aria-hidden />
+          <span className="max-w-[260px] truncate">{base}</span>
+        </div>
+
+        {/* Path + endpoints — editable. Wrapped in a flex-1 container
+            so it grows to fill the row while the server chip stays
+            left-anchored at its natural width. */}
         <Input
           size="md"
-          value={draftUrl}
+          value={draftTail}
           onChange={(e) => handleChange(e.currentTarget.value)}
           onFocus={() => setEditing(true)}
           onBlur={() => setEditing(false)}
-          placeholder="https://api.example.com/path"
-          leadingIcon={<Link2 className="h-3.5 w-3.5" aria-hidden="true" />}
-          aria-label="Request URL"
+          placeholder="/path/{id}?query=value"
+          aria-label="Request path and endpoints"
           wrapperClassName="min-h-0 h-9 flex-1 rounded-none border-0 bg-transparent font-mono focus-within:ring-0 focus-within:border-transparent"
           className="min-h-0 h-full"
         />
@@ -260,6 +444,10 @@ function UrlBar({
   );
 }
 
+function stripTrailingSlash(s: string): string {
+  return s.endsWith("/") ? s.slice(0, -1) : s;
+}
+
 /* ------------------------------------------------------------------ */
 /* URL → draft sync                                                    */
 /* ------------------------------------------------------------------ */
@@ -268,13 +456,3 @@ function UrlBar({
 // same parser. Re-exported below for backward compatibility with any
 // test that imported it from here.
 export { syncUrlToDraft };
-
-/* ------------------------------------------------------------------ */
-/* Meta field                                                          */
-/* ------------------------------------------------------------------ */
-
-// MetaField is kept available for future header metadata. Not used
-// today (the workspace header is chrome-only). Removing the warning
-// that follows would force callers to keep importing it; the export
-// is intentionally left in place.
-void (null as unknown as { label: string } | null);

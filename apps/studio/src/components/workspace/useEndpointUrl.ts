@@ -4,8 +4,9 @@ import * as React from "react";
 
 import type { Operation } from "@spectra/core";
 
-import { useRequestDraftStore } from "@/components/request";
 import { mockDocumentation } from "@/mock/documentation";
+import { useRequestDraftStore } from "@/components/request";
+import { resolveActiveServerUrl, useUrlStore } from "./urlStore";
 
 /* ------------------------------------------------------------------ */
 /* URL resolution                                                      */
@@ -98,14 +99,23 @@ function stripTrailingSlash(s: string): string {
 /* ------------------------------------------------------------------ */
 
 export interface UseEndpointUrlResult {
-  /** Server base URL. The current `development` server from the mock
-   *  docs — wired to the request store's environment. */
+  /** Server base URL. Resolved from the URL store — either the user
+   *  picked server from the docs or the custom override. */
   readonly serverUrl: string;
   /** Path template with `{var}` placeholders. */
   readonly path: string;
   /** Substituted full URL — updates whenever path / query params
    *  change in the draft store. */
   readonly url: string;
+  /** Selected server id (from the docs) — `undefined` when the user
+   *  is on a custom URL. */
+  readonly serverId: string | undefined;
+  /** `true` when the user is overriding with a custom URL. */
+  readonly isCustom: boolean;
+  /** Display label for the active server (e.g. `"Production"` or the
+   *  raw URL when on a custom one). Useful for the URL bar's server
+   *  chip caption. */
+  readonly serverLabel: string;
 }
 
 /**
@@ -124,12 +134,16 @@ export function useEndpointUrl(operation: Operation): UseEndpointUrlResult {
   const endpointId = operation.id;
   const path = resolveOperationUrl(endpointId);
 
-  // Server lookup — for now the demo always picks the first server.
-  // A future phase can read this from the request store's environment.
-  const serverUrl = React.useMemo(
-    () => mockDocumentation.servers[0]?.url ?? "",
-    [],
+  // Active server URL — reads from the URL store (server picker +
+  // custom URL override). Re-runs only when the store changes.
+  const urlState = useUrlStore();
+  const resolvedServer = React.useMemo(
+    () => resolveActiveServerUrl(urlState),
+    [urlState],
   );
+  const serverUrl = resolvedServer.url;
+  const serverId = resolvedServer.serverId;
+  const isCustom = resolvedServer.isCustom;
 
   // Subscribe to the raw arrays — the store keeps references stable
   // when no edit happens, so `Object.is` short-circuits without an
@@ -166,7 +180,15 @@ export function useEndpointUrl(operation: Operation): UseEndpointUrlResult {
     [serverUrl, path, pathMap, queryList],
   );
 
-  return { serverUrl, path, url };
+  // Friendly label for the active server — used by the URL bar's
+  // server chip so users see "Production" rather than the raw URL.
+  const serverLabel = React.useMemo(() => {
+    if (isCustom) return serverUrl;
+    const match = mockDocumentation.servers.find((s) => s.id === serverId);
+    return match?.name ?? serverUrl;
+  }, [isCustom, serverId, serverUrl]);
+
+  return { serverUrl, path, url, serverId, isCustom, serverLabel };
 }
 
 const EMPTY_QUERY: ReadonlyArray<{
