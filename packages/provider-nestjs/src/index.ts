@@ -8,3 +8,4 @@ export * from "./config/SpectraConfig";
 export * from "./documentation/InfoReader";
 export * from "./documentation/ServerReader";
 export * from "./documentation/DocumentationBuilder";
+export * from "./pipeline";

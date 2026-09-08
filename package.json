@@ -16,6 +16,7 @@
     "start:docs": "pnpm --filter docs start",
     "build": "turbo run build",
     "test:nest": "tsx packages/provider-nestjs/test/controller.test.ts",
+    "test:nest:bin": "tsx packages/provider-nestjs/test/spectra-bin.test.ts",
     "test:nest:decorator": "tsx packages/provider-nestjs/test/decorator.test.ts",
     "test:nest:scopes": "tsx packages/provider-nestjs/test/scopes.test.ts",
     "test:nest:order": "tsx packages/provider-nestjs/test/order.test.ts",

@@ -9,6 +9,7 @@ import type {
     Schema,
     Server,
 } from "@spectra/core";
+import { writeSpectraBin } from "@spectra/core";
 import {
     AstProject,
     ClassQuery,
@@ -38,6 +39,8 @@ import {
     DecoratorArguments,
     DecoratorReader,
 } from "../utils";
+
+import type { IDocumentationBuilder } from "../pipeline/interfaces/IDocumentationBuilder";
 
 /**
  * Full Documentation builder.
@@ -87,7 +90,7 @@ export interface DocumentationBuilderOptions {
     readonly unifiedExtractor?: UnifiedSemanticExtractor;
 }
 
-export class DocumentationBuilder {
+export class DocumentationBuilder implements IDocumentationBuilder {
     private readonly projectRoot: string;
     private readonly projectInspector: ProjectInspector;
     private readonly bootstrapInspector: NestBootstrapInspector;
@@ -108,6 +111,13 @@ export class DocumentationBuilder {
 
     /**
      * One-shot build of the entire `Documentation` value object.
+     *
+     * <p>This is a pure function — no I/O beyond reading source files
+     * for analysis. Encoding and persistence are handled by the
+     * pipeline collaborators
+     * ({@link IDocumentationEncoder}, {@link IDocumentationWriter}) so
+     * the builder stays focused on its single responsibility:
+     * producing a Documentation value object from project sources.</p>
      */
     public build(): Documentation {
         const project = this.projectInspector.inspect(this.projectRoot);
@@ -138,6 +148,22 @@ export class DocumentationBuilder {
             components: this.buildComponents(semantic, sourceFiles),
             paths: pathGenerator.generate(semantic.operations),
         };
+    }
+
+    /**
+     * Convenience: build + write a `.spectra/document.bin` for the
+     * project root this builder was constructed with. Provided for
+     * callers that don't want to wire the full pipeline; production
+     * code should prefer {@link SpectraBuildPipeline} which is fully
+     * configurable via dependency injection.
+     */
+    public async buildAndWrite(): Promise<{
+        readonly documentation: Documentation;
+        readonly outputPath: string;
+    }> {
+        const documentation = this.build();
+        const outputPath = await writeSpectraBin(documentation, this.projectRoot);
+        return { documentation, outputPath };
     }
 
     private runSemanticExtractor(
