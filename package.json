@@ -17,6 +17,7 @@
     "build": "turbo run build",
     "test:nest": "tsx packages/provider-nestjs/test/controller.test.ts",
     "test:nest:bin": "tsx packages/provider-nestjs/test/spectra-bin.test.ts",
+    "test:nest:build": "tsx packages/provider-nestjs/test/build-documentation-bin.test.ts",
     "test:nest:full": "tsx packages/provider-nestjs/test/full-integration.test.ts",
     "test:nest:decorator": "tsx packages/provider-nestjs/test/decorator.test.ts",
     "test:nest:scopes": "tsx packages/provider-nestjs/test/scopes.test.ts",
