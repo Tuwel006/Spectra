@@ -9,7 +9,7 @@ import type {
     Schema,
     Server,
 } from "@spectra/core";
-import { writeSpectraBin } from "@spectra/core";
+import { writeSpectraBin } from "@spectra/core/encoding";
 import {
     AstProject,
     ClassQuery,

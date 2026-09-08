@@ -18,6 +18,7 @@ export const HTTP_METHOD_CONFIG: Record<
   OPTIONS: { label: "OPTIONS", className: "text-gray-500",    bgClassName: "bg-gray-500/10",    textClassName: "text-gray-500" },
   TRACE:   { label: "TRACE",   className: "text-pink-500",    bgClassName: "bg-pink-500/10",    textClassName: "text-pink-500" },
   CONNECT: { label: "CONNECT", className: "text-orange-500",  bgClassName: "bg-orange-500/10",  textClassName: "text-orange-500" },
+  ALL:     { label: "ALL",     className: "text-text-muted",  bgClassName: "bg-bg-muted",       textClassName: "text-text-muted" },
 } as const;
 
 /**

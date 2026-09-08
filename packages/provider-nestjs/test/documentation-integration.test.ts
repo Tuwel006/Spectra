@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 import {
     decodeDocumentation,
     resolveSpectraBinPath,
-    type Documentation,
-} from "@spectra/core";
+} from "@spectra/core/encoding";
+import type { Documentation } from "@spectra/core";
 
 import { DocumentationBuilder, SpectraBuildPipeline } from "../src";
 

@@ -10,6 +10,8 @@ export type {
     IDocumentationPipeline,
     PipelineRunOptions,
     PipelineRunResult,
+    PipelineScanStats,
+    PipelineVerification,
 } from "./interfaces/IDocumentationPipeline";
 
 /* ------------------------------------------------------------------ */
@@ -25,4 +27,9 @@ export {
 /* Orchestrator                                                        */
 /* ------------------------------------------------------------------ */
 
-export { SpectraBuildPipeline } from "./SpectraBuildPipeline";
+export {
+    SpectraBuildPipeline,
+    collectStats,
+    runDefaultPipeline,
+    formatPipelineSummary,
+} from "./SpectraBuildPipeline";

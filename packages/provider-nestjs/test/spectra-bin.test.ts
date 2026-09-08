@@ -26,7 +26,7 @@ import {
     resolveSpectraBinPath,
     SpectraFormatError,
     writeSpectraBin,
-} from "@spectra/core";
+} from "@spectra/core/encoding";
 import type { Documentation } from "@spectra/core";
 
 function assert(condition: boolean, message: string): void {

@@ -36,4 +36,9 @@ export * from "./types/Identifier";
 export * from "./types/NamedCollection";
 export * from "./types/Reference";
 
-export * from "./encoding";
+// NOTE: The encoding module is intentionally NOT re-exported here.
+// It depends on `node:fs/promises`, `node:zlib`, and `@msgpack/msgpack`,
+// which cannot be bundled for the browser. Consumers that need
+// encoding (build scripts, the studio server-side loader) should
+// import directly from "@spectra/core/encoding". See
+// `packages/core/src/encoding/index.ts` for the public surface.
