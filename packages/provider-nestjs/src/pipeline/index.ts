@@ -32,4 +32,5 @@ export {
     collectStats,
     runDefaultPipeline,
     formatPipelineSummary,
+    buildDocumentationBin,
 } from "./SpectraBuildPipeline";

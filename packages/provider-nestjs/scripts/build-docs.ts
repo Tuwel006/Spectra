@@ -46,16 +46,11 @@ import * as path from "node:path";
 import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
 
-import {
-    FileSystemSpectraWriter,
-    MsgpackGzipEncoder,
-    resolveSpectraBinPath,
-} from "@spectra/core/encoding";
+import { resolveSpectraBinPath } from "@spectra/core/encoding";
 
 import {
-    SpectraBuildPipeline,
+    buildDocumentationBin,
     formatPipelineSummary,
-    type IDocumentationPipeline,
 } from "../src/pipeline";
 
 interface CliArgs {
@@ -142,22 +137,15 @@ function validateProjectRoot(root: string): void {
     }
 }
 
-/**
- * Construct the production pipeline. Wired through interfaces so
- * that swapping the encoder or writer is a one-line change here.
- */
-function buildDefaultPipeline(projectRoot: string): IDocumentationPipeline {
-    const encoder = new MsgpackGzipEncoder();
-    const writer = new FileSystemSpectraWriter(encoder);
-    return new SpectraBuildPipeline(projectRoot, { encoder, writer });
-}
-
 async function main(): Promise<void> {
     const args = parseArgs(process.argv.slice(2));
     validateProjectRoot(args.projectRoot);
 
-    const pipeline = buildDefaultPipeline(args.projectRoot);
-    const result = await pipeline.run({
+    // Single-call entry point — wires the pipeline through the
+    // IDocumentationPipeline interface and runs build → encode → write.
+    // The .spectra/document.bin file lands at <projectRoot>/.spectra/
+    // document.bin, NOT in the calling process's working directory.
+    const result = await buildDocumentationBin(args.projectRoot, {
         destination: args.destination
             ? path.resolve(args.destination)
             : undefined,

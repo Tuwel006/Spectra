@@ -249,3 +249,49 @@ export function formatPipelineSummary(result: PipelineRunResult): string {
 // Re-export so the CLI script can construct a stable `path.dirname`
 // for the destination without importing path itself.
 export { path };
+
+/**
+ * One-call entry point for the full documentation integration.
+ *
+ * <p>This is the single function a caller needs when they want to
+ * turn a NestJS project root directory into a `.spectra/document.bin`
+ * file:</p>
+ *
+ * <pre>
+ *   const result = await buildDocumentationBin("./apps/example-api");
+ *   // → ".spectra/document.bin" lives inside that project root, NOT
+ *   //   in the calling process's working directory.
+ * </pre>
+ *
+ * <p>Under the hood it runs the standard four-stage pipeline
+ * (<em>build → encode → write → verify</em>) through the
+ * {@link IDocumentationPipeline} interface. Internally it constructs
+ * a default {@link SpectraBuildPipeline} with the production
+ * collaborators — callers that need to swap collaborators (custom
+ * builder / encoder / writer) should construct a pipeline directly.</p>
+ *
+ * <p>The result includes the absolute path of the file that was
+ * written, the byte count, the in-memory Documentation object, scan
+ * statistics, and a verification round-trip report.</p>
+ *
+ * @param projectRoot Absolute or relative path of the project to
+ *   document. The `.spectra/document.bin` file will be created at
+ *   `<projectRoot>/.spectra/document.bin`, regardless of the calling
+ *   process's working directory.
+ * @param options Optional per-run overrides (destination, metadata,
+ *   verify flag).
+ */
+export async function buildDocumentationBin(
+    projectRoot: string,
+    options?: PipelineRunOptions,
+): Promise<PipelineRunResult> {
+    // The pipeline resolves projectRoot internally — we don't path.join
+    // here because the pipeline already handles relative paths the same
+    // way DocumentationBuilder does (DocumentationBuilder calls
+    // path.resolve(projectRoot) on its own). Letting it through
+    // untouched keeps the two layers consistent.
+    const pipeline: IDocumentationPipeline = new SpectraBuildPipeline(
+        projectRoot,
+    );
+    return pipeline.run(options);
+}
