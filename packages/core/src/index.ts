@@ -35,3 +35,5 @@ export * from "./models/type/Type";
 export * from "./types/Identifier";
 export * from "./types/NamedCollection";
 export * from "./types/Reference";
+
+export * from "./encoding";
