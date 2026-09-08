@@ -24,15 +24,18 @@
  *       <code>&lt;projectRoot&gt;/.spectra/config.json</code>.</li>
  * </ol>
  *
- * <p>Usage:</p>
+ * <p>The CLI <strong>strictly uses the current working directory</strong>
+ * as the project root — there is no positional argument. You must
+ * <code>cd</code> into your NestJS project before running
+ * <code>spectra</code>:</p>
  *
  * <pre>
- *   spectra &lt;project-root&gt;
- *   spectra apps/example-api
- *   spectra apps/example-api --endpoint /api-docs
- *   spectra apps/example-api --endpoint            # auto-generate from package name
- *   spectra apps/example-api --no-verify
- *   spectra apps/example-api --json &gt; report.json
+ *   cd apps/example-api
+ *   spectra                          # uses cwd
+ *   spectra --endpoint /api-docs
+ *   spectra --endpoint              # auto-generate from package name
+ *   spectra --no-verify
+ *   spectra --json &gt; report.json
  * </pre>
  */
 
@@ -53,7 +56,6 @@ import { resolveEndpoint, type ResolvedEndpoint } from "./endpoint";
 import { Spinner, Box } from "./spinner";
 
 interface CliArgs {
-    readonly projectRoot: string;
     readonly destination: string | undefined;
     readonly verify: boolean;
     readonly json: boolean;
@@ -64,7 +66,6 @@ interface CliArgs {
 }
 
 function parseArgs(argv: readonly string[]): CliArgs {
-    let projectRoot: string | undefined;
     let destination: string | undefined;
     let verify = true;
     let json = false;
@@ -109,39 +110,25 @@ function parseArgs(argv: readonly string[]): CliArgs {
                 printUsage();
                 process.exit(0);
             default:
-                if (arg.startsWith("--")) {
-                    throw new Error(`Unknown flag: ${arg}`);
-                }
-                if (projectRoot !== undefined) {
-                    throw new Error(
-                        `Multiple project roots provided: ${projectRoot} and ${arg}`,
-                    );
-                }
-                projectRoot = path.resolve(arg);
+                // Anything else is rejected — the CLI strictly uses
+                // cwd and accepts no positional argument.
+                throw new Error(
+                    `Unknown argument: ${arg}\n` +
+                        `The CLI strictly uses the current working directory as the project root.\n` +
+                        `cd into your project and run \`spectra\` with no arguments.`,
+                );
         }
     }
 
-    if (projectRoot === undefined) {
-        // Default to the bundled example API so the CLI is runnable
-        // with no arguments during local development.
-        const here = path.dirname(new URL(import.meta.url).pathname);
-        projectRoot = path.resolve(
-            here,
-            "..",
-            "..",
-            "..",
-            "..",
-            "apps",
-            "example-api",
-        );
-    }
-
-    return { projectRoot, destination, verify, json, endpointExplicit, endpointAuto };
+    return { destination, verify, json, endpointExplicit, endpointAuto };
 }
 
 function printUsage(): void {
     const lines = [
-        "Usage: spectra [options] <project-root>",
+        "Usage: spectra [options]",
+        "",
+        "The CLI strictly uses the current working directory as the project root.",
+        "cd into your NestJS project (the one with tsconfig.json) and run `spectra`.",
         "",
         "Options:",
         "  --no-verify             Skip the post-write decode-and-verify stage",
@@ -151,7 +138,6 @@ function printUsage(): void {
         "  --json                  Emit the pipeline result as JSON",
         "  --help                  Print this message",
         "",
-        "Default project root when omitted: apps/example-api",
         "Default endpoint:                    /spectra",
         "",
         "Endpoint resolution order:",
@@ -170,14 +156,21 @@ function validateProjectRoot(root: string): void {
     const tsconfig = path.join(root, "tsconfig.json");
     if (!existsSync(tsconfig)) {
         throw new Error(
-            `Project root ${root} has no tsconfig.json — cannot build documentation`,
+            `Project root ${root} has no tsconfig.json — cannot build documentation.\n` +
+                `cd into a NestJS project directory before running \`spectra\`.`,
         );
     }
 }
 
 async function main(): Promise<void> {
     const args = parseArgs(process.argv.slice(2));
-    validateProjectRoot(args.projectRoot);
+
+    // STRICT: project root is always the current working directory.
+    // The CLI does not accept a positional argument — users must cd
+    // into their NestJS project before invoking `spectra`.
+    const projectRoot = process.cwd();
+
+    validateProjectRoot(projectRoot);
 
     // Print the header FIRST so the log stream that follows flows in
     // chronological order.
@@ -188,9 +181,9 @@ async function main(): Promise<void> {
         console.log("  │      Build, format, and persist API docs      │");
         console.log("  ╰───────────────────────────────────────────────╯");
         console.log("");
-        console.log(`  project root    ${args.projectRoot}`);
+        console.log(`  project root    ${projectRoot}`);
         console.log(
-            `  default output  ${resolveSpectraBinPath(args.projectRoot)}`,
+            `  default output  ${resolveSpectraBinPath(projectRoot)}`,
         );
         console.log("");
     }
@@ -199,7 +192,7 @@ async function main(): Promise<void> {
     const endpoint: ResolvedEndpoint = await resolveEndpoint({
         explicit: args.endpointExplicit,
         autoGenerate: args.endpointAuto,
-        projectRoot: args.projectRoot,
+        projectRoot,
     });
 
     if (!args.json) {
@@ -215,17 +208,17 @@ async function main(): Promise<void> {
 
     // ---- Run the pipeline --------------------------------------------
     const pipelineSpinner = new Spinner({ label: "pipeline" });
-    pipelineSpinner.start(`Scanning ${args.projectRoot}…`);
+    pipelineSpinner.start(`Scanning ${projectRoot}…`);
 
     let result;
     try {
-        result = await buildDocumentationBin(args.projectRoot, {
+        result = await buildDocumentationBin(projectRoot, {
             destination: args.destination
                 ? path.resolve(args.destination)
                 : undefined,
             verify: args.verify,
             // Silent logger — the CLI does its own pretty output via
-            // the Spinner + Box below. Setting silentLogger keeps
+            // the Spinner + Box below. Setting a no-op logger keeps
             // the pipeline's built-in stage logs out of the way.
             logger: {
                 info: () => undefined,
@@ -245,7 +238,7 @@ async function main(): Promise<void> {
     const configSpinner = new Spinner({ label: "config" });
     configSpinner.start(`Writing .spectra/config.json (endpoint=${endpoint.endpoint})…`);
     try {
-        await writeSpectraConfig(args.projectRoot, { endpoint: endpoint.endpoint });
+        await writeSpectraConfig(projectRoot, { endpoint: endpoint.endpoint });
         configSpinner.succeed(`Wrote endpoint ${endpoint.endpoint}`);
     } catch (err) {
         configSpinner.fail(`Failed to write config: ${(err as Error).message}`);
@@ -255,6 +248,7 @@ async function main(): Promise<void> {
     // ---- Render the result -------------------------------------------
     if (args.json) {
         const safe = {
+            projectRoot,
             destination: result.destination,
             bytesWritten: result.bytesWritten,
             elapsedMs: result.elapsedMs,
@@ -275,7 +269,7 @@ async function main(): Promise<void> {
 
     // Summary box.
     const box = new Box("SPECTRA · BUILD REPORT", 68);
-    box.addRow("scan", `Scanned ${args.projectRoot}`, "ok");
+    box.addRow("scan", `Scanned ${projectRoot}`, "ok");
     box.addRow("build", `${result.stats.pathCount} paths · ${result.stats.operationCount} operations · ${result.stats.schemaCount} schemas`, "ok");
     box.addRow("format", `msgpack + gzip + SPBC header (${result.bytesWritten} bytes)`, "ok");
     box.addRow("write", result.destination, "ok");
