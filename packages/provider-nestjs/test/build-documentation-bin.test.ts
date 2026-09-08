@@ -205,9 +205,9 @@ async function main(): Promise<void> {
         r.verification?.error ?? "ok",
     );
 
-    // ---- Post-flight cleanup -----------------------------------------
-    await rm(spectraDir, { recursive: true, force: true });
-    console.log(`\nPost-flight: removed ${spectraDir}`);
+    // // ---- Post-flight cleanup -----------------------------------------
+    // await rm(spectraDir, { recursive: true, force: true });
+    // console.log(`\nPost-flight: removed ${spectraDir}`);
 
     console.log(`\nSummary: ${pass}/${total}`);
     if (pass !== total) process.exit(1);

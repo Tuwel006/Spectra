@@ -47,6 +47,19 @@ export {
 } from "./writers/FileSystemSpectraWriter";
 
 /* ------------------------------------------------------------------ */
+/* Config                                                              */
+/* ------------------------------------------------------------------ */
+
+export {
+    readSpectraConfig,
+    writeSpectraConfig,
+    resolveSpectraConfigPath,
+    SPECTRA_DEFAULT_ENDPOINT,
+    SPECTRA_CONFIG_FILE_NAME,
+    type SpectraConfig,
+} from "./config/SpectraConfig";
+
+/* ------------------------------------------------------------------ */
 /* Convenience helpers                                                */
 /* ------------------------------------------------------------------ */
 // These helpers exist for ad-hoc consumers (scripts, tests) that don't
