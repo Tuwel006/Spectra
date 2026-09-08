@@ -141,10 +141,25 @@ async function main(): Promise<void> {
     const args = parseArgs(process.argv.slice(2));
     validateProjectRoot(args.projectRoot);
 
+    // Print the human-readable header FIRST so the log stream that
+    // follows flows in chronological order:
+    //   header → scan → build → format → write → verify → done →
+    //   summary.
+    if (!args.json) {
+        console.log("===== SPECTRA — FULL DOCUMENT INTEGRATION =====\n");
+        console.log(`Project root:  ${args.projectRoot}`);
+        console.log(
+            `Default path:  ${resolveSpectraBinPath(args.projectRoot)}`,
+        );
+        console.log("");
+    }
+
     // Single-call entry point — wires the pipeline through the
     // IDocumentationPipeline interface and runs build → encode → write.
     // The .spectra/document.bin file lands at <projectRoot>/.spectra/
     // document.bin, NOT in the calling process's working directory.
+    // The pipeline emits stage-prefixed log lines via the default
+    // consoleLogger — they appear above this call site.
     const result = await buildDocumentationBin(args.projectRoot, {
         destination: args.destination
             ? path.resolve(args.destination)
@@ -171,12 +186,6 @@ async function main(): Promise<void> {
         console.log(JSON.stringify(safe, null, 2));
         return;
     }
-
-    console.log("===== SPECTRA — FULL DOCUMENT INTEGRATION =====\n");
-    console.log(`Project root:  ${args.projectRoot}`);
-    console.log(
-        `Default path:  ${resolveSpectraBinPath(args.projectRoot)}`,
-    );
 
     // Surface the file size on disk so the user can confirm the
     // opaque payload landed correctly.

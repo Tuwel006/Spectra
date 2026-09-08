@@ -8,7 +8,11 @@ import {
 } from "@spectra/core/encoding";
 import type { Documentation } from "@spectra/core";
 
-import { DocumentationBuilder, SpectraBuildPipeline } from "../src";
+import {
+    DocumentationBuilder,
+    SpectraBuildPipeline,
+    silentLogger,
+} from "../src";
 
 /**
  * End-to-end Documentation integration test.
@@ -72,8 +76,12 @@ async function main(): Promise<void> {
     try {
         // Stage 2 — Full pipeline (build → encode → write). This is
         // what production code does. The result lives at
-        // `<projectRoot>/.spectra/document.bin`.
-        const result = await new SpectraBuildPipeline(projectRoot).run();
+        // `<projectRoot>/.spectra/document.bin`. We pass silentLogger
+        // so the pipeline's stage-prefixed log lines don't
+        // interleave with the test's PASS/FAIL output.
+        const result = await new SpectraBuildPipeline(projectRoot).run({
+            logger: silentLogger,
+        });
         binPath = result.destination;
         binBytes = result.bytesWritten;
         console.log(`\nWrote ${binBytes} bytes to ${binPath}`);

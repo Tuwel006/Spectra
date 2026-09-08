@@ -38,6 +38,7 @@ import {
 import {
     SpectraBuildPipeline,
     collectStats,
+    silentLogger,
     type IDocumentationPipeline,
 } from "../src/pipeline";
 
@@ -85,7 +86,9 @@ async function main(): Promise<void> {
     );
 
     // ---- 2. Run the full pipeline -------------------------------------
-    const result = await pipeline.run();
+    // silentLogger keeps the pipeline's stage-prefixed log lines from
+    // interleaving with the test's PASS/FAIL output.
+    const result = await pipeline.run({ logger: silentLogger });
     check("pipeline.run() resolved without throwing", true);
     check(
         "destination is the canonical <root>/.spectra/document.bin",

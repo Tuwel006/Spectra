@@ -4,6 +4,8 @@ import type {
     WriteResult,
 } from "@spectra/core/encoding";
 
+import type { PipelineLogger } from "../logging/PipelineLogger";
+
 /**
  * High-level counts the pipeline collects while building. Surfaced
  * alongside the write result so CLI / build-runner consumers can
@@ -71,6 +73,14 @@ export interface PipelineRunOptions {
      * CLI runs; tests that only care about the write can opt out.
      */
     readonly verify?: boolean;
+    /**
+     * Logger that the pipeline emits stage transitions to. When
+     * omitted, the pipeline uses {@link consoleLogger} so a CLI
+     * invocation produces a readable log stream by default. Tests
+     * should pass {@link silentLogger} to keep their assertion
+     * output clean.
+     */
+    readonly logger?: PipelineLogger;
 }
 
 /**

@@ -21,6 +21,10 @@ import type {
     PipelineScanStats,
     PipelineVerification,
 } from "./interfaces/IDocumentationPipeline";
+import {
+    consoleLogger,
+    type PipelineLogger,
+} from "./logging/PipelineLogger";
 
 /**
  * Production pipeline: build → encode → write → (verify).
@@ -75,64 +79,104 @@ export class SpectraBuildPipeline implements IDocumentationPipeline {
         const startedAt = Date.now();
         const destination = options?.destination ?? resolveSpectraBinPath(this.projectRoot);
         const shouldVerify = options?.verify ?? true;
+        const logger: PipelineLogger = options?.logger ?? consoleLogger;
 
-        // Stage 1 — Build. The builder is synchronous today but we
-        // keep the pipeline async to leave room for builders that
-        // resolve type information lazily.
+        // ---- Stage 0 — Scan -------------------------------------------
+        // The builder reads source files for analysis. We don't log
+        // every file here — that would spam the output — but we do
+        // log the project root so the user knows where we started.
+        logger.info("scan", `Scanning project at ${this.projectRoot}`);
+
+        // ---- Stage 1 — Build ------------------------------------------
+        // The builder is synchronous today but we keep the pipeline
+        // async to leave room for builders that resolve type
+        // information lazily.
         let documentation: Documentation;
         try {
             documentation = this.builder.build();
         } catch (cause) {
+            const msg = describe(cause);
+            logger.error("build", `Build failed: ${msg}`);
             throw new PipelineError(
-                `Pipeline failed during build stage: ${describe(cause)}`,
+                `Pipeline failed during build stage: ${msg}`,
                 "build",
                 { cause },
             );
         }
+        logger.info(
+            "build",
+            "Documentation built from sources",
+            {
+                info: documentation.info.title,
+                version: documentation.info.version,
+            },
+        );
 
         const stats = collectStats(documentation);
+        logger.info(
+            "build",
+            `Extracted ${stats.pathCount} paths / ${stats.operationCount} operations / ${stats.schemaCount} schemas`,
+        );
 
-        // Stage 2 — Pre-flight encode. We don't keep the result —
-        // the writer re-encodes internally to keep encode+write
-        // atomic. Calling encode() here is just a dry-run that lets
-        // format errors surface at the right stage with a useful
-        // message instead of being reported as a write failure.
+        // ---- Stage 2 — Pre-flight encode ------------------------------
+        // We don't keep the result — the writer re-encodes internally
+        // to keep encode+write atomic. Calling encode() here is just
+        // a dry-run that lets format errors surface at the right
+        // stage with a useful message instead of being reported as a
+        // write failure.
+        logger.info("format", "Encoding documentation (msgpack + gzip + SPBC header)");
         try {
             await this.encoder.encode(documentation, {
                 metadata: options?.metadata,
             });
         } catch (cause) {
+            const msg = describe(cause);
+            logger.error("format", `Encode failed: ${msg}`);
             throw new PipelineError(
-                `Pipeline failed during encode stage: ${describe(cause)}`,
+                `Pipeline failed during encode stage: ${msg}`,
                 "encode",
                 { cause },
             );
         }
 
-        // Stage 3 — Write. The writer re-encodes internally. We
-        // let writer errors propagate untouched when they're a
-        // SpectraError — they already carry useful context. Plain
-        // Error / unknown values get wrapped in a PipelineError.
+        // ---- Stage 3 — Write -------------------------------------------
+        // The writer re-encodes internally. We let writer errors
+        // propagate untouched when they're a SpectraError — they
+        // already carry useful context. Plain Error / unknown values
+        // get wrapped in a PipelineError.
+        const spectraDir = path.dirname(destination);
+        logger.info("write", `Creating folder ${spectraDir}`);
+        logger.info(
+            "write",
+            `Writing ${path.basename(destination)} to ${spectraDir}`,
+        );
         let writeResult;
         try {
             writeResult = await this.writer.write(documentation, destination, {
                 metadata: options?.metadata,
             });
         } catch (cause) {
+            const msg = describe(cause);
+            logger.error("write", `Write failed: ${msg}`);
             if (cause instanceof SpectraError) throw cause;
             throw new PipelineError(
-                `Pipeline failed during write stage: ${describe(cause)}`,
+                `Pipeline failed during write stage: ${msg}`,
                 "write",
                 { cause },
             );
         }
+        logger.info(
+            "write",
+            `Wrote ${writeResult.bytesWritten} bytes to ${writeResult.destination}`,
+        );
 
-        // Stage 4 — Verify (optional). Reads the file back and
-        // decodes it. Surfaces bugs in the encoder/writer pair that
-        // would otherwise only manifest when the studio loads the
-        // file later.
+        // ---- Stage 4 — Verify (optional) -------------------------------
+        // Reads the file back and decodes it. Surfaces bugs in the
+        // encoder/writer pair that would otherwise only manifest
+        // when the studio loads the file later.
         let verification: PipelineVerification | undefined;
         if (shouldVerify) {
+            logger.info("verify", "Reading file back for round-trip check");
             const verifyStart = Date.now();
             try {
                 const decoded = await this.writer.read(writeResult.destination);
@@ -141,14 +185,28 @@ export class SpectraBuildPipeline implements IDocumentationPipeline {
                     decoded,
                     elapsedMs: Date.now() - verifyStart,
                 };
+                logger.info(
+                    "verify",
+                    `Round-trip OK (decoded in ${verification.elapsedMs} ms)`,
+                );
             } catch (cause) {
+                const msg = describe(cause);
                 verification = {
                     ok: false,
-                    error: describe(cause),
+                    error: msg,
                     elapsedMs: Date.now() - verifyStart,
                 };
+                logger.error("verify", `Round-trip failed: ${msg}`);
             }
+        } else {
+            logger.warn("verify", "Verification skipped (--no-verify)");
         }
+
+        // ---- Stage 5 — Done --------------------------------------------
+        logger.info(
+            "done",
+            `Pipeline finished in ${Date.now() - startedAt} ms`,
+        );
 
         return {
             destination: writeResult.destination,
