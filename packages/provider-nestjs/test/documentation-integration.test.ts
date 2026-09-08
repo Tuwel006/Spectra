@@ -444,6 +444,20 @@ async function main(): Promise<void> {
     );
 
     console.log(`\nSummary: ${pass}/${total}`);
+
+    // Always clean up the .spectra folder we created under the
+    // project root so the example-api project doesn't end up with a
+    // stale .spectra/document.bin checked into source control.
+    // Best-effort — cleanup failure shouldn't fail the test.
+    try {
+        await fs.rm(path.join(projectRoot, ".spectra"), {
+            recursive: true,
+            force: true,
+        });
+    } catch {
+        /* ignore */
+    }
+
     if (pass !== total) process.exit(1);
 }
 

@@ -15,8 +15,8 @@
  * `tsx packages/provider-nestjs/test/spectra-bin.test.ts`.</p>
  */
 
-import * as os from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { rm } from "node:fs/promises";
 
 import {
@@ -87,8 +87,14 @@ async function main(): Promise<void> {
     console.log("OK  round-trip via encodeDocumentation/decodeDocumentation");
 
     // ---- 2. Filesystem round-trip -------------------------------------
-    const projectRoot = await import("node:fs/promises").then(fs =>
-        fs.mkdtemp(path.join(os.tmpdir(), "spectra-bin-")),
+    // Use the package directory itself as the "project root" so the
+    // .spectra folder is easy to find (relative to the repo, not deep
+    // inside an opaque /var/folders/... temp dir). Cleaned up in the
+    // finally block below.
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const projectRoot = path.resolve(here, "..");
+    console.log(
+        `OK  using project root ${projectRoot} for filesystem round-trip`,
     );
     try {
         const target = await writeSpectraBin(original, projectRoot);
@@ -98,6 +104,9 @@ async function main(): Promise<void> {
             target.endsWith(`${path.sep}.spectra${path.sep}document.bin`),
             "target lives under .spectra/document.bin",
         );
+        console.log(
+            `OK  writeSpectraBin wrote to ${target}`,
+        );
 
         const fromDisk = await readSpectraBin(projectRoot);
         assert(
@@ -106,8 +115,13 @@ async function main(): Promise<void> {
         );
         console.log(`OK  round-trip via writeSpectraBin/readSpectraBin (${target})`);
     } finally {
-        await rm(path.join(projectRoot, ".spectra"), { recursive: true, force: true });
-        await rm(projectRoot, { recursive: true, force: true });
+        // Always remove the .spectra folder we created under the
+        // package directory so a successful or failed run leaves the
+        // working tree clean.
+        await rm(path.join(projectRoot, ".spectra"), {
+            recursive: true,
+            force: true,
+        });
     }
 
     // ---- 3. Format error paths ----------------------------------------
