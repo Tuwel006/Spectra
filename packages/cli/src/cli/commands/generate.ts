@@ -21,6 +21,10 @@ import {
 } from "../../output/json.js";
 
 import {
+    renderUrlBanner,
+} from "../../output/url-banner.js";
+
+import {
     generateDocument,
 } from "../../pipeline/generate-document.js";
 
@@ -160,4 +164,14 @@ export async function runGenerate(
         verification:
             result.verification,
     });
+
+    // Print the Next.js-style URL banner telling the user where the
+    // studio will be served. The port defaults to 3000 — the user
+    // can copy/paste the snippet into their AppModule.
+    console.log(
+        renderUrlBanner({
+            endpoint: endpoint.endpoint,
+            port: 3000,
+        }),
+    );
 }
