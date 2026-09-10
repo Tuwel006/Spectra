@@ -11,10 +11,16 @@
  * <p>Output: <code>dist/spectra.mjs</code> with a shebang + ESM
  * marker so it can be invoked directly via <code>node …/spectra.mjs</code>
  * or via the <code>spectra</code> bin entry in package.json.</p>
+ *
+ * <p>The build also stages the studio's static export from
+ * <code>apps/studio/out/</code> into <code>dist/studio/</code> so
+ * the runtime NestJS module can serve the docs UI straight from the
+ * CLI tarball — no extra install step required at the user's
+ * project.</p>
  */
 
 import { build } from "esbuild";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { cpSync, readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,9 +39,10 @@ mkdirSync(OUT_DIR, { recursive: true });
  *   - `bundle: true`            inline every import into one file
  *   - `format: "esm"`           emit native ESM (matches `\"type\": \"module\"`)
  *   - `platform: "node"`        target Node, not the browser
- *   - `external: ["node:*"]`    leave Node built-ins as bare specifiers —
- *                               bundling them produces broken output
- *                               because they don't exist as files.
+ *   - `external: ["typescript"]` keep typescript external — it uses
+ *                               dynamic require() internally that
+ *                               ESM can't model cleanly
+ *   - `external: ["node:*"]`    leave Node built-ins as bare specifiers
  *
  * Workspace deps (`@spectra/core`, `@spectra/provider-nestjs`) are
  * explicitly bundled — that's how the single-file output works
@@ -51,14 +58,6 @@ const result = await build({
     sourcemap: false,
     minify: false,
     treeShaking: true,
-    /**
-     * Mark `typescript` as external because it uses dynamic require()
-     * internally for filesystem access — bundling it as ESM breaks
-     * those dynamic requires. Keeping it external means Node loads
-     * it from node_modules at runtime, which works perfectly fine.
-     *
-     * `node:*` covers Node built-ins (fs, path, zlib, etc.).
-     */
     external: ["typescript", "node:*"],
     logLevel: "info",
     metafile: true,
@@ -66,15 +65,13 @@ const result = await build({
 
 // Prepend the shebang so `node ./dist/spectra.mjs` and the bin
 // link can execute the file directly. esbuild writes the file
-// without a shebang by default (it doesn't know the output is meant
-// to be invoked as a binary).
+// without a shebang by default.
 const shebang = "#!/usr/bin/env node\n";
 const body = readFileSync(OUT_FILE, "utf8");
 if (!body.startsWith("#!")) {
     writeFileSync(OUT_FILE, shebang + body);
 }
 
-// Mark the file executable on POSIX systems (no-op on Windows).
 try {
     const { chmodSync } = await import("node:fs");
     chmodSync(OUT_FILE, 0o755);
@@ -84,3 +81,30 @@ try {
 
 console.log(`\n✓ bundled ${OUT_FILE}`);
 console.log(`  ${(result.metafile?.outputs?.[OUT_FILE]?.bytes ?? 0).toLocaleString()} bytes`);
+
+/* ------------------------------------------------------------------ */
+/* Studio copy                                                         */
+/* ------------------------------------------------------------------ */
+//
+// Copy the pre-built studio into dist/studio/ so the published CLI
+// tarball ships the docs UI as well. The path is resolved relative
+// to the monorepo root (../../apps/studio/out) — this script only
+// runs in the monorepo, never as a standalone CLI invocation.
+//
+// Skip silently if the studio hasn't been built yet — pure-TS
+// contributors won't always run `pnpm --filter studio build` before
+// building the CLI, and that's fine. The CLI will surface a clean
+// error message at runtime if `.spectra/studio/index.html` is
+// missing.
+
+const studioSrc = path.resolve(pkgRoot, "..", "..", "apps", "studio", "out");
+const studioDst = path.join(OUT_DIR, "studio");
+
+if (existsSync(studioSrc)) {
+    cpSync(studioSrc, studioDst, { recursive: true });
+    console.log(`✓ staged studio → ${path.relative(process.cwd(), studioDst)}`);
+} else {
+    console.warn(
+        `⚠ studio not built yet — skipping. Run \`pnpm --filter studio build\` and re-run this script.`,
+    );
+}

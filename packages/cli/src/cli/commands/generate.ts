@@ -90,6 +90,7 @@ export async function runGenerate(
                           )
                         : undefined,
                 verify: args.verify,
+                callerUrl: import.meta.url,
             });
 
         spinner.succeed(
