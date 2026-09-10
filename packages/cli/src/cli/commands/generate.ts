@@ -1,13 +1,7 @@
 import * as path from "node:path";
 
 import {
-    formatPipelineSummary,
-    buildDocumentationBin,
-} from "@spectra/provider-nestjs";
-
-import {
     resolveSpectraBinPath,
-    writeSpectraConfig,
 } from "@spectra/core/encoding";
 
 import {
@@ -25,6 +19,10 @@ import {
 import {
     printJson,
 } from "../../output/json.js";
+
+import {
+    generateDocument,
+} from "../../pipeline/generate-document.js";
 
 import type {
     CliArgs,
@@ -78,31 +76,21 @@ export async function runGenerate(
 
     try {
         result =
-            await buildDocumentationBin(
+            await generateDocument({
                 projectRoot,
-                {
-                    destination:
-                        args.destination
-                            ? path.resolve(
-                                  projectRoot,
-                                  args.destination,
-                              )
-                            : undefined,
-
-                    verify: args.verify,
-
-                    logger: {
-                        info: () =>
-                            undefined,
-
-                        warn: () =>
-                            undefined,
-
-                        error: () =>
-                            undefined,
-                    },
-                },
-            );
+                endpoint:
+                    endpoint.endpoint,
+                endpointSource:
+                    endpoint.source,
+                destination:
+                    args.destination
+                        ? path.resolve(
+                              projectRoot,
+                              args.destination,
+                          )
+                        : undefined,
+                verify: args.verify,
+            });
 
         spinner.succeed(
             `Documentation generated in ${result.elapsedMs} ms`,
@@ -110,37 +98,6 @@ export async function runGenerate(
     } catch (error) {
         spinner.fail(
             `Generation failed: ${
-                error instanceof Error
-                    ? error.message
-                    : String(error)
-            }`,
-        );
-
-        throw error;
-    }
-
-    const configSpinner =
-        new Spinner();
-
-    configSpinner.start(
-        "Writing Spectra configuration...",
-    );
-
-    try {
-        await writeSpectraConfig(
-            projectRoot,
-            {
-                endpoint:
-                    endpoint.endpoint,
-            },
-        );
-
-        configSpinner.succeed(
-            "Spectra configuration written",
-        );
-    } catch (error) {
-        configSpinner.fail(
-            `Config failed: ${
                 error instanceof Error
                     ? error.message
                     : String(error)
@@ -202,12 +159,4 @@ export async function runGenerate(
         verification:
             result.verification,
     });
-
-    console.log("");
-
-    console.log(
-        formatPipelineSummary(
-            result,
-        ),
-    );
 }
