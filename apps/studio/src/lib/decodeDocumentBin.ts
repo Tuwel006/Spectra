@@ -1,5 +1,5 @@
 import { decode as msgpackDecode } from "@msgpack/msgpack";
-import pako from "pako";
+import { ungzip } from "pako";
 
 import type { Documentation } from "@spectra/core";
 
@@ -70,7 +70,7 @@ export async function loadDocumentBin(
     const payload = bytes.subarray(SPECTRA_BIN_HEADER_SIZE);
 
     // pako.ungzip returns a Uint8Array of decompressed bytes.
-    const decompressed = pako.ungzip(payload);
+    const decompressed = ungzip(payload);
     const documentation = msgpackDecode(decompressed) as Documentation;
 
     return {
