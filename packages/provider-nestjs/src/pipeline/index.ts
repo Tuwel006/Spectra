@@ -1,0 +1,46 @@
+/* ------------------------------------------------------------------ */
+/* Interfaces                                                          */
+/* ------------------------------------------------------------------ */
+
+export type {
+    IDocumentationBuilder,
+} from "./interfaces/IDocumentationBuilder";
+
+export type {
+    IDocumentationPipeline,
+    PipelineRunOptions,
+    PipelineRunResult,
+    PipelineScanStats,
+    PipelineVerification,
+} from "./interfaces/IDocumentationPipeline";
+
+/* ------------------------------------------------------------------ */
+/* Errors                                                              */
+/* ------------------------------------------------------------------ */
+
+export {
+    PipelineError,
+    type PipelineStage,
+} from "./errors/PipelineError";
+
+/* ------------------------------------------------------------------ */
+/* Logging                                                             */
+/* ------------------------------------------------------------------ */
+
+export {
+    consoleLogger,
+    silentLogger,
+    type PipelineLogger,
+} from "./logging/PipelineLogger";
+
+/* ------------------------------------------------------------------ */
+/* Orchestrator                                                        */
+/* ------------------------------------------------------------------ */
+
+export {
+    SpectraBuildPipeline,
+    collectStats,
+    runDefaultPipeline,
+    formatPipelineSummary,
+    buildDocumentationBin,
+} from "./SpectraBuildPipeline";

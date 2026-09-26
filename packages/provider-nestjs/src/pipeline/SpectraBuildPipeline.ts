@@ -1,0 +1,355 @@
+import * as path from "node:path";
+
+import type { Documentation } from "@spectra/core";
+import {
+    FileSystemSpectraWriter,
+    MsgpackGzipEncoder,
+    resolveSpectraBinPath,
+    SpectraError,
+    type IDocumentationEncoder,
+    type IDocumentationWriter,
+} from "@spectra/core/encoding";
+
+import { DocumentationBuilder } from "../documentation/DocumentationBuilder";
+
+import { PipelineError } from "./errors/PipelineError";
+import type { IDocumentationBuilder } from "./interfaces/IDocumentationBuilder";
+import type {
+    IDocumentationPipeline,
+    PipelineRunOptions,
+    PipelineRunResult,
+    PipelineScanStats,
+    PipelineVerification,
+} from "./interfaces/IDocumentationPipeline";
+import {
+    consoleLogger,
+    type PipelineLogger,
+} from "./logging/PipelineLogger";
+
+/**
+ * Production pipeline: build → encode → write → (verify).
+ *
+ * <p>This class is the only place in the codebase that orchestrates
+ * the three collaborators. Each collaborator is injected through its
+ * interface so a different builder, encoder, or writer can be
+ * substituted without modifying this class (Dependency Inversion).</p>
+ *
+ * <p>Default collaborators are wired when the pipeline is constructed
+ * without arguments — `DocumentationBuilder` for the build stage,
+ * `MsgpackGzipEncoder` for the encode stage, and the filesystem
+ * writer for the write stage. Tests and tooling can override any of
+ * the three.</p>
+ *
+ * <p>The optional verification stage reads the file back from disk
+ * and decodes it, populating {@link PipelineRunResult.verification}.
+ * This catches encoding/writer bugs at runtime that would otherwise
+ * only show up when the studio tries to load the file later.</p>
+ */
+export class SpectraBuildPipeline implements IDocumentationPipeline {
+    private readonly projectRoot: string;
+    private readonly builder: IDocumentationBuilder;
+    private readonly encoder: IDocumentationEncoder;
+    private readonly writer: IDocumentationWriter;
+
+    public constructor(
+        projectRoot: string,
+        options?: {
+            readonly builder?: IDocumentationBuilder;
+            readonly encoder?: IDocumentationEncoder;
+            readonly writer?: IDocumentationWriter;
+        },
+    ) {
+        this.projectRoot = projectRoot;
+
+        // Default collaborator wiring — mirrors what production code
+        // needs and what most tests want. Each can be overridden via
+        // the constructor options for testability / extensibility.
+        const encoder = options?.encoder ?? new MsgpackGzipEncoder();
+        const writer = options?.writer ?? new FileSystemSpectraWriter(encoder);
+        const builder = options?.builder ?? new DocumentationBuilder(projectRoot);
+
+        this.builder = builder;
+        this.encoder = encoder;
+        this.writer = writer;
+    }
+
+    public async run(
+        options?: PipelineRunOptions,
+    ): Promise<PipelineRunResult> {
+        const startedAt = Date.now();
+        const destination = options?.destination ?? resolveSpectraBinPath(this.projectRoot);
+        const shouldVerify = options?.verify ?? true;
+        const logger: PipelineLogger = options?.logger ?? consoleLogger;
+
+        // ---- Stage 0 — Scan -------------------------------------------
+        // The builder reads source files for analysis. We don't log
+        // every file here — that would spam the output — but we do
+        // log the project root so the user knows where we started.
+        logger.info("scan", `Scanning project at ${this.projectRoot}`);
+
+        // ---- Stage 1 — Build ------------------------------------------
+        // The builder is synchronous today but we keep the pipeline
+        // async to leave room for builders that resolve type
+        // information lazily.
+        let documentation: Documentation;
+        try {
+            documentation = this.builder.build();
+        } catch (cause) {
+            const msg = describe(cause);
+            logger.error("build", `Build failed: ${msg}`);
+            throw new PipelineError(
+                `Pipeline failed during build stage: ${msg}`,
+                "build",
+                { cause },
+            );
+        }
+        logger.info(
+            "build",
+            "Documentation built from sources",
+            {
+                info: documentation.info.title,
+                version: documentation.info.version,
+            },
+        );
+
+        const stats = collectStats(documentation);
+        logger.info(
+            "build",
+            `Extracted ${stats.pathCount} paths / ${stats.operationCount} operations / ${stats.schemaCount} schemas`,
+        );
+
+        // ---- Stage 2 — Pre-flight encode ------------------------------
+        // We don't keep the result — the writer re-encodes internally
+        // to keep encode+write atomic. Calling encode() here is just
+        // a dry-run that lets format errors surface at the right
+        // stage with a useful message instead of being reported as a
+        // write failure.
+        logger.info("format", "Encoding documentation (msgpack + gzip + SPBC header)");
+        try {
+            await this.encoder.encode(documentation, {
+                metadata: options?.metadata,
+            });
+        } catch (cause) {
+            const msg = describe(cause);
+            logger.error("format", `Encode failed: ${msg}`);
+            throw new PipelineError(
+                `Pipeline failed during encode stage: ${msg}`,
+                "encode",
+                { cause },
+            );
+        }
+
+        // ---- Stage 3 — Write -------------------------------------------
+        // The writer re-encodes internally. We let writer errors
+        // propagate untouched when they're a SpectraError — they
+        // already carry useful context. Plain Error / unknown values
+        // get wrapped in a PipelineError.
+        const spectraDir = path.dirname(destination);
+        logger.info("write", `Creating folder ${spectraDir}`);
+        logger.info(
+            "write",
+            `Writing ${path.basename(destination)} to ${spectraDir}`,
+        );
+        let writeResult;
+        try {
+            writeResult = await this.writer.write(documentation, destination, {
+                metadata: options?.metadata,
+            });
+        } catch (cause) {
+            const msg = describe(cause);
+            logger.error("write", `Write failed: ${msg}`);
+            if (cause instanceof SpectraError) throw cause;
+            throw new PipelineError(
+                `Pipeline failed during write stage: ${msg}`,
+                "write",
+                { cause },
+            );
+        }
+        logger.info(
+            "write",
+            `Wrote ${writeResult.bytesWritten} bytes to ${writeResult.destination}`,
+        );
+
+        // ---- Stage 4 — Verify (optional) -------------------------------
+        // Reads the file back and decodes it. Surfaces bugs in the
+        // encoder/writer pair that would otherwise only manifest
+        // when the studio loads the file later.
+        let verification: PipelineVerification | undefined;
+        if (shouldVerify) {
+            logger.info("verify", "Reading file back for round-trip check");
+            const verifyStart = Date.now();
+            try {
+                const decoded = await this.writer.read(writeResult.destination);
+                verification = {
+                    ok: true,
+                    decoded,
+                    elapsedMs: Date.now() - verifyStart,
+                };
+                logger.info(
+                    "verify",
+                    `Round-trip OK (decoded in ${verification.elapsedMs} ms)`,
+                );
+            } catch (cause) {
+                const msg = describe(cause);
+                verification = {
+                    ok: false,
+                    error: msg,
+                    elapsedMs: Date.now() - verifyStart,
+                };
+                logger.error("verify", `Round-trip failed: ${msg}`);
+            }
+        } else {
+            logger.warn("verify", "Verification skipped (--no-verify)");
+        }
+
+        // ---- Stage 5 — Done --------------------------------------------
+        logger.info(
+            "done",
+            `Pipeline finished in ${Date.now() - startedAt} ms`,
+        );
+
+        return {
+            destination: writeResult.destination,
+            bytesWritten: writeResult.bytesWritten,
+            bytes: writeResult.bytes,
+            write: writeResult,
+            elapsedMs: Date.now() - startedAt,
+            stats,
+            verification,
+            documentation,
+        };
+    }
+}
+
+/**
+ * Walk a Documentation value object once and collect counts for every
+ * section. Pure function — useful both inside the pipeline (to populate
+ * {@link PipelineRunResult.stats}) and in standalone scripts that just
+ * want a summary.
+ */
+export function collectStats(doc: Documentation): PipelineScanStats {
+    let operationCount = 0;
+    for (const p of Object.values(doc.paths)) {
+        for (const op of Object.values(p.operations)) {
+            if (op) operationCount++;
+        }
+    }
+    return {
+        pathCount: Object.keys(doc.paths).length,
+        operationCount,
+        schemaCount: Object.keys(doc.components.schemas).length,
+        responseCount: Object.keys(doc.components.responses).length,
+        parameterCount: Object.keys(doc.components.parameters).length,
+        requestBodyCount: Object.keys(doc.components.requestBodies).length,
+        headerCount: Object.keys(doc.components.headers).length,
+        securitySchemeCount: Object.keys(doc.components.securitySchemes).length,
+        tagCount: doc.tags.length,
+        serverCount: doc.servers.length,
+    };
+}
+
+function describe(err: unknown): string {
+    if (err instanceof Error) return err.message;
+    return String(err);
+}
+
+/**
+ * Convenience entry point used by the CLI script. Wraps the default
+ * pipeline construction so scripts don't need to import the class
+ * directly. Accepts an already-built pipeline (for testing) when one
+ * is provided; falls back to a default-construction pipeline.
+ */
+export async function runDefaultPipeline(
+    projectRoot: string,
+    pipeline?: IDocumentationPipeline,
+    options?: PipelineRunOptions,
+): Promise<PipelineRunResult> {
+    const p = pipeline ?? new SpectraBuildPipeline(projectRoot);
+    return p.run(options);
+}
+
+/**
+ * Pretty-print a pipeline result. Used by the CLI script and any
+ * other consumer that wants a single-call summary.
+ */
+export function formatPipelineSummary(result: PipelineRunResult): string {
+    const lines: string[] = [];
+    lines.push(`Destination: ${result.destination}`);
+    lines.push(`Bytes written: ${result.bytesWritten}`);
+    lines.push(`Elapsed: ${result.elapsedMs} ms`);
+    lines.push("");
+    lines.push("Scan stats:");
+    lines.push(`  paths:           ${result.stats.pathCount}`);
+    lines.push(`  operations:      ${result.stats.operationCount}`);
+    lines.push(`  schemas:         ${result.stats.schemaCount}`);
+    lines.push(`  responses:       ${result.stats.responseCount}`);
+    lines.push(`  parameters:      ${result.stats.parameterCount}`);
+    lines.push(`  request bodies:  ${result.stats.requestBodyCount}`);
+    lines.push(`  headers:         ${result.stats.headerCount}`);
+    lines.push(`  security schemes: ${result.stats.securitySchemeCount}`);
+    lines.push(`  tags:            ${result.stats.tagCount}`);
+    lines.push(`  servers:         ${result.stats.serverCount}`);
+
+    if (result.verification) {
+        lines.push("");
+        if (result.verification.ok) {
+            lines.push(
+                `Verification: OK (decoded in ${result.verification.elapsedMs} ms)`,
+            );
+        } else {
+            lines.push(`Verification: FAILED — ${result.verification.error}`);
+        }
+    }
+
+    return lines.join("\n");
+}
+
+// Re-export so the CLI script can construct a stable `path.dirname`
+// for the destination without importing path itself.
+export { path };
+
+/**
+ * One-call entry point for the full documentation integration.
+ *
+ * <p>This is the single function a caller needs when they want to
+ * turn a NestJS project root directory into a `.spectra/document.bin`
+ * file:</p>
+ *
+ * <pre>
+ *   const result = await buildDocumentationBin("./apps/example-api");
+ *   // → ".spectra/document.bin" lives inside that project root, NOT
+ *   //   in the calling process's working directory.
+ * </pre>
+ *
+ * <p>Under the hood it runs the standard four-stage pipeline
+ * (<em>build → encode → write → verify</em>) through the
+ * {@link IDocumentationPipeline} interface. Internally it constructs
+ * a default {@link SpectraBuildPipeline} with the production
+ * collaborators — callers that need to swap collaborators (custom
+ * builder / encoder / writer) should construct a pipeline directly.</p>
+ *
+ * <p>The result includes the absolute path of the file that was
+ * written, the byte count, the in-memory Documentation object, scan
+ * statistics, and a verification round-trip report.</p>
+ *
+ * @param projectRoot Absolute or relative path of the project to
+ *   document. The `.spectra/document.bin` file will be created at
+ *   `<projectRoot>/.spectra/document.bin`, regardless of the calling
+ *   process's working directory.
+ * @param options Optional per-run overrides (destination, metadata,
+ *   verify flag).
+ */
+export async function buildDocumentationBin(
+    projectRoot: string,
+    options?: PipelineRunOptions,
+): Promise<PipelineRunResult> {
+    // The pipeline resolves projectRoot internally — we don't path.join
+    // here because the pipeline already handles relative paths the same
+    // way DocumentationBuilder does (DocumentationBuilder calls
+    // path.resolve(projectRoot) on its own). Letting it through
+    // untouched keeps the two layers consistent.
+    const pipeline: IDocumentationPipeline = new SpectraBuildPipeline(
+        projectRoot,
+    );
+    return pipeline.run(options);
+}

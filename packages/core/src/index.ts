@@ -13,6 +13,7 @@ export * from "./models/Info";
 export * from "./models/Server";
 export * from "./models/Tag";
 export * from "./models/Components";
+export * from "./models/DecoratorUsage";
 
 export * from "./models/media/MediaType";
 export * from "./models/path/Operation";
@@ -34,3 +35,10 @@ export * from "./models/type/Type";
 export * from "./types/Identifier";
 export * from "./types/NamedCollection";
 export * from "./types/Reference";
+
+// NOTE: The encoding module is intentionally NOT re-exported here.
+// It depends on `node:fs/promises`, `node:zlib`, and `@msgpack/msgpack`,
+// which cannot be bundled for the browser. Consumers that need
+// encoding (build scripts, the studio server-side loader) should
+// import directly from "@spectra/core/encoding". See
+// `packages/core/src/encoding/index.ts` for the public surface.

@@ -16,6 +16,9 @@
     "start:docs": "pnpm --filter docs start",
     "build": "turbo run build",
     "test:nest": "tsx packages/provider-nestjs/test/controller.test.ts",
+    "test:nest:bin": "tsx packages/provider-nestjs/test/spectra-bin.test.ts",
+    "test:nest:build": "tsx packages/provider-nestjs/test/build-documentation-bin.test.ts",
+    "test:nest:full": "tsx packages/provider-nestjs/test/full-integration.test.ts",
     "test:nest:decorator": "tsx packages/provider-nestjs/test/decorator.test.ts",
     "test:nest:scopes": "tsx packages/provider-nestjs/test/scopes.test.ts",
     "test:nest:order": "tsx packages/provider-nestjs/test/order.test.ts",
@@ -50,11 +53,19 @@
     "test:nest:module": "tsx packages/provider-nestjs/test/module-semantic.test.ts",
     "test:nest:unified": "tsx packages/provider-nestjs/test/unified-semantic-model.test.ts",
     "test:nest:g0-config": "tsx packages/provider-nestjs/test/g0-config.test.ts",
+    "test:nest:documentation": "tsx packages/provider-nestjs/test/documentation-integration.test.ts",
+    "test:nest:project-inspector": "tsx packages/provider-ast/test/project-inspector.test.ts",
     "test:ast:expression": "tsx packages/provider-ast/test/expression.test.ts",
     "test:nest:symbol": "tsx packages/provider-nestjs/test/symbol.test.ts",
     "test:nest:declaration": "tsx packages/provider-nestjs/test/declaration.test.ts",
     "test:nest:expression": "tsx packages/provider-nestjs/test/expression.test.ts",
     "test": "turbo run test",
+    "test:log:nest:documentation": "bash scripts/test-log.sh nest-documentation tsx packages/provider-nestjs/test/documentation-integration.test.ts",
+    "test:log:nest:project-inspector": "bash scripts/test-log.sh nest-project-inspector tsx packages/provider-ast/test/project-inspector.test.ts",
+    "test:log:nest:g0-config": "bash scripts/test-log.sh nest-g0-config tsx packages/provider-nestjs/test/g0-config.test.ts",
+    "test:log:nest:unified": "bash scripts/test-log.sh nest-unified tsx packages/provider-nestjs/test/unified-semantic-model.test.ts",
+    "logs:list": "ls -lh logs/",
+    "logs:clean": "rm -rf logs/",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "clean": "turbo run clean"
@@ -66,5 +77,8 @@
     "tsx": "^4.23.1",
     "turbo": "^2.10.4",
     "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "@types/express": "^5.0.6"
   }
 }

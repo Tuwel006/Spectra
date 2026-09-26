@@ -1,0 +1,35 @@
+{
+  "name": "@spectra/cli",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "bin": {
+    "spectra": "./dist/spectra.mjs"
+  },
+  "main": "./dist/spectra.mjs",
+  "types": "./dist/spectra.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/spectra.mjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node scripts/bundle.mjs",
+    "dev": "node scripts/bundle.mjs --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prebuild": "pnpm --filter studio --filter studio... --if-present build"
+  },
+  "dependencies": {
+    "@spectra/core": "workspace:*",
+    "@spectra/provider-nestjs": "workspace:*",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

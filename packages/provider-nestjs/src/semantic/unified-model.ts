@@ -48,6 +48,14 @@ export interface RouteOperation {
     readonly headers: RouteMetadata["headers"];
     readonly redirect: RouteMetadata["redirect"];
 
+    /**
+     * The original method declaration. Re-exported so that
+     * downstream generators (Phase F) can introspect the method
+     * signature — e.g. to resolve the return type for response
+     * bodies — without re-running the analyzer.
+     */
+    readonly methodNode: ts.MethodDeclaration;
+
     readonly moduleName: string | undefined;
 
     readonly classGuards: ControllerMetadata["classGuards"];
@@ -182,6 +190,7 @@ export class UnifiedSemanticExtractor {
             httpCode: route.httpCode,
             headers: route.headers,
             redirect: route.redirect,
+            methodNode: route.methodNode,
             moduleName: undefined,
             classGuards: controller.classGuards,
             classPipes: controller.classPipes,

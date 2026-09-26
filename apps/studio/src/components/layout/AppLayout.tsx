@@ -13,6 +13,7 @@ import { TopBar } from "./TopBar";
 import { LeftSidebar } from "./LeftSidebar";
 import { MainWorkspace } from "./MainWorkspace";
 import { RightSidebar } from "./RightSidebar";
+import { StudioControls } from "@/components/studio-controls/StudioControls";
 import { BottomPanel, BottomPanelBody } from "./BottomPanel";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useLayout, COLLAPSED_RAIL_SIZE } from "@/store/layout";
@@ -79,7 +80,12 @@ export function AppLayout({ children }: { children?: React.ReactNode }): React.R
     return <AppLayoutFallback>{children}</AppLayoutFallback>;
   }
 
-  return <AppLayoutShell>{children}</AppLayoutShell>;
+  return (
+    <>
+      <AppLayoutShell>{children}</AppLayoutShell>
+      <StudioControls />
+    </>
+  );
 }
 
 /**
