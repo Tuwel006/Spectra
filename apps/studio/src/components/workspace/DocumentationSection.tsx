@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
 import type { Operation } from "@spectra/core";
-import { mockDocumentation } from "@/mock/documentation";
+import { useDocumentationContext } from "@/lib/documentationContext";
 
 import { useWorkspace } from "./hooks/useWorkspace";
 import { useWorkspaceStore } from "./store/workspaceStore";
@@ -38,6 +38,7 @@ export function DocumentationSection({
 }): React.ReactElement {
   const meta = readOperationTagsAndAuth(operation);
   const { openTab } = useWorkspace();
+  const { documentation } = useDocumentationContext();
 
   const open = useWorkspaceStore(
     (s) => s.ui[tabId]?.sections.documentation ?? true,
@@ -84,7 +85,7 @@ export function DocumentationSection({
                     key={tag}
                     type="button"
                     onClick={() => {
-                      const tagRef = mockDocumentation.tags.find(
+                      const tagRef = documentation?.tags.find(
                         (t) => t.name === tag,
                       );
                       if (tagRef) {

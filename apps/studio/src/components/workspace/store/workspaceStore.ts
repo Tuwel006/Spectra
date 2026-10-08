@@ -4,8 +4,7 @@ import * as React from "react";
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
-import { mockDocumentation } from "@/mock/documentation";
-import type { Operation } from "@spectra/core";
+import type { Documentation, Operation } from "@spectra/core";
 
 import type { WorkspaceTab } from "../types/Workspace";
 
@@ -318,36 +317,45 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 /* Static resolution helpers                                          */
 /* ------------------------------------------------------------------ */
 
-/** All known operation ids, computed once from the bundled mock. */
-let operationIdsCache: ReadonlySet<string> | null = null;
-function getOperationIds(): ReadonlySet<string> {
-  if (operationIdsCache !== null) return operationIdsCache;
+/**
+ * All known operation ids from the active documentation.
+ *
+ * <p>Trade-off: this is now a linear scan per call. We intentionally
+ * dropped the module-level cache that previously read from
+ * <code>mockDocumentation</code> at import time — that cache was
+ * never invalidated after a doc swap and is the source of a latent
+ * stale-read bug. The studio doc is small (10s of operations) so
+ * the per-call walk is acceptable. Persisted tab ids and the
+ * resolver in <code>resolveOperation</code> both call this; if it
+ * becomes a hot path, swap the call site for a
+ * <code>useMemo</code> inside the consumer hook that owns the
+ * <code>Documentation</code> reference.</p>
+ */
+export function getOperationIds(doc: Documentation): ReadonlySet<string> {
   const ids = new Set<string>();
-  for (const path of Object.values(mockDocumentation.paths)) {
+  for (const path of Object.values(doc.paths)) {
     for (const op of Object.values(path.operations)) {
       if (op?.id) ids.add(op.id);
     }
   }
-  operationIdsCache = ids;
   return ids;
 }
 
-/** Resolve an operation by id from the bundled documentation. */
-const operationByIdCache = new Map<string, Operation | undefined>();
-export function resolveOperation(endpointId: string): Operation | undefined {
-  const cached = operationByIdCache.get(endpointId);
-  if (cached !== undefined || operationByIdCache.has(endpointId)) {
-    return cached;
-  }
-  for (const path of Object.values(mockDocumentation.paths)) {
+/**
+ * Resolve an operation by id from the active documentation.
+ *
+ * <p>Linear scan over the loaded <code>Documentation</code> — see
+ * {@link getOperationIds} for the cache trade-off.</p>
+ */
+export function resolveOperation(
+  doc: Documentation,
+  endpointId: string,
+): Operation | undefined {
+  for (const path of Object.values(doc.paths)) {
     for (const op of Object.values(path.operations)) {
-      if (op && op.id === endpointId) {
-        operationByIdCache.set(endpointId, op);
-        return op;
-      }
+      if (op && op.id === endpointId) return op;
     }
   }
-  operationByIdCache.set(endpointId, undefined);
   return undefined;
 }
 

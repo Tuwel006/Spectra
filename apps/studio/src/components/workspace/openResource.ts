@@ -1,6 +1,6 @@
 "use client";
 
-import { mockDocumentation } from "@/mock/documentation";
+import type { NamedCollection, Schema } from "@spectra/core";
 
 import type { WorkspaceResourceType, WorkspaceTab } from "./types/Workspace";
 
@@ -31,17 +31,20 @@ export function openResource(
 }
 
 /**
- * Resolve a friendly title for a resource based on the documentation.
- * Falls back to the raw id when nothing better exists.
+ * Resolve a friendly title for a resource based on the active
+ * documentation. Falls back to the raw id when nothing better exists.
+ *
+ * <p>The schema map is passed in (rather than read from a module
+ * constant) so this helper stays a pure function and reacts to
+ * documentation reloads.</p>
  */
 export function resolveResourceTitle(
   resourceType: WorkspaceResourceType,
   resourceId: string,
+  schemas: NamedCollection<Schema> | Record<string, Schema>,
 ): string {
   if (resourceType === "schema") {
-    return (
-      mockDocumentation.components.schemas[resourceId]?.name ?? resourceId
-    );
+    return schemas[resourceId]?.name ?? resourceId;
   }
   return resourceId;
 }

@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
-import { mockDocumentation } from "@/mock/documentation";
+import { useDocumentationContext } from "@/lib/documentationContext";
 import type { Operation } from "@spectra/core";
 
 import { useWorkspace } from "./hooks/useWorkspace";
@@ -58,12 +58,18 @@ export function EndpointHeader({
   const { activeTab, togglePin } = useWorkspace();
   const isPinned = activeTab?.pinned ?? false;
   const { url, path, serverUrl, isCustom, serverLabel } = useEndpointUrl(operation);
+  const { documentation } = useDocumentationContext();
+  const servers = documentation?.servers ?? [];
+  // Default server id (used as the documented-server fallback when the
+  // URL store hasn't picked one yet). Read OUTSIDE the zustand selector
+  // so the selector closure only depends on a stable string.
+  const defaultServerId = servers[0]?.id;
 
   // URL store wiring — controlled inputs write back into the store on
   // every change. We keep the read-side fields memoised via the store
   // selectors here so React can bail out when nothing changed.
   const selectedServerId = useUrlStore(
-    (s) => s.selectedServerId ?? mockDocumentation.servers[0]?.id,
+    (s) => s.selectedServerId ?? defaultServerId,
   );
   const customServerUrl = useUrlStore((s) => s.customServerUrl);
   const setSelectedServer = useUrlStore((s) => s.setSelectedServer);
@@ -81,7 +87,7 @@ export function EndpointHeader({
     }
   }, [url]);
 
-  const serverOptions = mockDocumentation.servers.map((s) => ({
+  const serverOptions = servers.map((s) => ({
     value: s.id,
     label: s.name ?? s.url,
   }));

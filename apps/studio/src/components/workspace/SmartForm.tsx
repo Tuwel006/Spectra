@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
+import { useDocumentationContext } from "@/lib/documentationContext";
 import type { Schema } from "@spectra/core";
 
 import {
@@ -41,13 +42,27 @@ export function SmartForm({
   schema,
   value,
   onChange,
-  resolveReference = defaultResolveReference,
+  resolveReference: resolveReferenceProp,
 }: {
   schema: Schema;
   value: Record<string, unknown>;
   onChange: (next: Record<string, unknown>) => void;
   resolveReference?: (id: string) => Schema | undefined;
 }): React.ReactElement {
+  const { documentation } = useDocumentationContext();
+  // Build the resolver from the active documentation. Falls back to
+  // the supplied `resolveReference` prop (or `defaultResolveReference`,
+  // which now returns `undefined`) when the doc isn't loaded yet.
+  const schemas = documentation?.components.schemas;
+  const resolveReference = React.useCallback(
+    (id: string): Schema | undefined => {
+      if (schemas) return schemas[id];
+      if (resolveReferenceProp) return resolveReferenceProp(id);
+      return defaultResolveReference(id);
+    },
+    [schemas, resolveReferenceProp],
+  );
+
   const properties = React.useMemo(
     () => Object.values(schema.properties),
     [schema],

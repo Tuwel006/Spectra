@@ -21,6 +21,22 @@ export interface DecodedDocument {
 }
 
 /**
+ * Resolve the endpoint prefix from the current page URL.
+ *
+ * <p>The studio is mounted at a configurable endpoint (e.g. <code>/api-explorer</code>)
+ * and the runtime serves <code>document.bin</code> from that same
+ * endpoint. Returning the path minus its trailing slash lets relative
+ * <code>source</code> values resolve to <code>&lt;endpoint&gt;/document.bin</code>.</p>
+ *
+ * <p>Re-exported so the test suite can stub it via
+ * <code>vi.mock("./decodeDocumentBin", …)</code>.</p>
+ */
+export function endpointFromLocation(): string {
+    if (typeof window === "undefined") return "/spectra";
+    return window.location.pathname.replace(/\/$/, "") || "/spectra";
+}
+
+/**
  * Fetches the encoded Spectra document over HTTP and decodes it
  * client-side using msgpack + gzip + the SPBC magic header.
  *
@@ -38,15 +54,24 @@ export interface DecodedDocument {
  * <p>That's it — after this function returns, the user has a
  * fully-typed {@link Documentation} value with no JSON-shaped
  * intermediate (msgpack is binary, smaller and faster than JSON).</p>
+ *
+ * <p>If <code>source</code> begins with <code>/</code> it is treated
+ * as an absolute URL path. Otherwise the current endpoint
+ * (<code>endpointFromLocation()</code>) is prepended so a relative
+ * <code>"document.bin"</code> resolves to
+ * <code>&lt;endpoint&gt;/document.bin</code> rather than host root.</p>
  */
 export async function loadDocumentBin(
     source: string = "document.bin",
     fetcher: typeof fetch = fetch,
 ): Promise<DecodedDocument> {
-    const response = await fetcher(source);
+    const url = source.startsWith("/")
+        ? source
+        : `${endpointFromLocation()}/${source}`;
+    const response = await fetcher(url);
     if (!response.ok) {
         throw new Error(
-            `Failed to fetch ${source}: ${response.status} ${response.statusText}`,
+            `Failed to fetch ${url}: ${response.status} ${response.statusText}`,
         );
     }
 

@@ -2,9 +2,9 @@
 
 import * as React from "react";
 
-import type { Operation } from "@spectra/core";
+import type { Documentation, Operation } from "@spectra/core";
 
-import { mockDocumentation } from "@/mock/documentation";
+import { useDocumentationContext } from "@/lib/documentationContext";
 import { useRequestDraftStore } from "@/components/request";
 import { resolveActiveServerUrl, useUrlStore } from "./urlStore";
 
@@ -13,22 +13,19 @@ import { resolveActiveServerUrl, useUrlStore } from "./urlStore";
 /* ------------------------------------------------------------------ */
 
 /**
- * Resolve the path URL for a given operation. Cached for repeat
- * lookups so the URL builder stays O(1) per draft change.
+ * Resolve the path URL for a given operation. Walks the supplied
+ * documentation's paths once per call so it stays correct when the
+ * active documentation reloads.
  */
-const opUrlCache = new Map<string, string>();
-export function resolveOperationUrl(opId: string): string {
-  const cached = opUrlCache.get(opId);
-  if (cached !== undefined) return cached;
-  for (const path of Object.values(mockDocumentation.paths)) {
+export function resolveOperationUrl(
+  opId: string,
+  doc: Documentation,
+): string {
+  for (const path of Object.values(doc.paths)) {
     for (const op of Object.values(path.operations)) {
-      if (op?.id === opId) {
-        opUrlCache.set(opId, path.url);
-        return path.url;
-      }
+      if (op?.id === opId) return path.url;
     }
   }
-  opUrlCache.set(opId, "");
   return "";
 }
 
@@ -131,15 +128,20 @@ export interface UseEndpointUrlResult {
  * new objects inside the selector.
  */
 export function useEndpointUrl(operation: Operation): UseEndpointUrlResult {
+  const { documentation } = useDocumentationContext();
   const endpointId = operation.id;
-  const path = resolveOperationUrl(endpointId);
+  const path = React.useMemo(
+    () => (documentation ? resolveOperationUrl(endpointId, documentation) : ""),
+    [documentation, endpointId],
+  );
 
   // Active server URL — reads from the URL store (server picker +
   // custom URL override). Re-runs only when the store changes.
   const urlState = useUrlStore();
+  const servers = documentation?.servers ?? [];
   const resolvedServer = React.useMemo(
-    () => resolveActiveServerUrl(urlState),
-    [urlState],
+    () => resolveActiveServerUrl(urlState, servers),
+    [urlState, servers],
   );
   const serverUrl = resolvedServer.url;
   const serverId = resolvedServer.serverId;
@@ -184,9 +186,9 @@ export function useEndpointUrl(operation: Operation): UseEndpointUrlResult {
   // server chip so users see "Production" rather than the raw URL.
   const serverLabel = React.useMemo(() => {
     if (isCustom) return serverUrl;
-    const match = mockDocumentation.servers.find((s) => s.id === serverId);
+    const match = servers.find((s) => s.id === serverId);
     return match?.name ?? serverUrl;
-  }, [isCustom, serverId, serverUrl]);
+  }, [isCustom, serverId, serverUrl, servers]);
 
   return { serverUrl, path, url, serverId, isCustom, serverLabel };
 }

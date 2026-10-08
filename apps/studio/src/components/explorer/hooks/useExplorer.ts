@@ -4,8 +4,6 @@ import * as React from "react";
 
 import type { Documentation } from "@spectra/core";
 
-import { mockDocumentation } from "@/mock/documentation";
-
 import {
   EXPLORER_SECTION,
   type ExplorerEndpoint,
@@ -315,17 +313,6 @@ function useToggle<T extends string>(
 }
 
 /* ------------------------------------------------------------------ */
-/* Default documentation                                               */
-/* ------------------------------------------------------------------ */
-
-/**
- * Default module-level documentation. `Explorer.tsx` swaps this out
- * for the prop one when provided, so the rest of the tree never
- * touches `@/mock` directly.
- */
-export const DEFAULT_DOCUMENTATION: Documentation = mockDocumentation;
-
-/* ------------------------------------------------------------------ */
 /* Public hook                                                         */
 /* ------------------------------------------------------------------ */
 
@@ -341,12 +328,17 @@ export interface UseExplorerOptions {
  * selection, and a live `query` for the search box. Filtering lives
  * in `useExplorerSearch` so the two concerns stay independent.
  *
+ * <p>The caller <strong>must</strong> supply a real
+ * {@link Documentation} value (typically obtained from
+ * {@link useDocumentationContext}). There is no default — every
+ * consumer in the tree reads the same documentation reference.</p>
+ *
  * Returns the unfiltered tree so heavy consumers (e.g. a virtualised
  * list) can swap in their own filtering strategy without losing
  * shared state.
  */
 export function useExplorer(
-  documentation: Documentation = DEFAULT_DOCUMENTATION,
+  documentation: Documentation,
   options: UseExplorerOptions = {},
 ): ExplorerState & {
   readonly tree: ExplorerTree;

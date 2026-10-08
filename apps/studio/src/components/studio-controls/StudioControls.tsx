@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
 
-import { useDocumentation } from "@/lib/documentationStore";
+import { useDocumentationContext } from "@/lib/documentationContext";
 
 /**
  * Floating action panel for the docs studio.
@@ -47,7 +47,7 @@ export function StudioControls(): React.ReactElement | null {
         save,
         reset,
         exportJson,
-    } = useDocumentation();
+    } = useDocumentationContext();
 
     const [exportUrl, setExportUrl] = React.useState<string | undefined>();
 

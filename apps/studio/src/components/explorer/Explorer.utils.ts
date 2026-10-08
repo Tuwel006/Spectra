@@ -7,7 +7,6 @@
  * from `Explorer.utils` without churn.
  */
 export {
-  DEFAULT_DOCUMENTATION,
   buildExplorerTree,
   flattenEndpoints,
   groupByTag,

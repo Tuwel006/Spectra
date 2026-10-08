@@ -1,5 +1,6 @@
 import type {
   ArrayType,
+  NamedCollection,
   Operation,
   PrimitiveType,
   ReferenceType,
@@ -9,8 +10,6 @@ import type {
 } from "@spectra/core";
 
 import { TypeKind } from "@spectra/core";
-
-import { mockDocumentation } from "@/mock/documentation";
 
 /* ------------------------------------------------------------------ */
 /* Status code helpers                                                  */
@@ -127,9 +126,20 @@ function firstSchemaName(response: CoreResponse): string | undefined {
 /* Schema lookup                                                        */
 /* ------------------------------------------------------------------ */
 
-export function lookupSchema(name: string | undefined): Schema | undefined {
+/**
+ * Resolve a schema name from the active documentation's schema map.
+ *
+ * <p>The map is passed in (rather than read from a module constant)
+ * so this helper stays a pure function and consumers can thread the
+ * loaded <code>Documentation</code> through from
+ * {@link useDocumentationContext}.</p>
+ */
+export function lookupSchema(
+  name: string | undefined,
+  schemas: NamedCollection<Schema> | Record<string, Schema>,
+): Schema | undefined {
   if (!name) return undefined;
-  return mockDocumentation.components.schemas[name];
+  return schemas[name];
 }
 
 /* ------------------------------------------------------------------ */
@@ -142,13 +152,17 @@ export function lookupSchema(name: string | undefined): Schema | undefined {
  * ship a real one. Deterministic — same input always produces same
  * output so React renders stay stable.
  */
-export function synthesizeExample(schemaName: string, depth = 0): unknown {
+export function synthesizeExample(
+  schemaName: string,
+  schemas: NamedCollection<Schema> | Record<string, Schema>,
+  depth = 0,
+): unknown {
   if (depth > 6) return null;
-  const schema = lookupSchema(schemaName);
+  const schema = lookupSchema(schemaName, schemas);
   if (!schema) return `<${schemaName}>`;
   const out: Record<string, unknown> = {};
   for (const [propName, prop] of Object.entries(schema.properties)) {
-    out[propName] = placeholderFor(prop.valueType, propName, depth);
+    out[propName] = placeholderFor(prop.valueType, propName, depth, schemas);
   }
   return out;
 }
@@ -157,19 +171,25 @@ function placeholderFor(
   type: Type,
   propName: string,
   depth: number,
+  schemas: NamedCollection<Schema> | Record<string, Schema>,
 ): unknown {
   switch (type.kind) {
     case TypeKind.PRIMITIVE:
       return primitivePlaceholder((type as PrimitiveType).name, propName);
     case TypeKind.REFERENCE: {
       const ref = (type as ReferenceType).reference;
-      const inner = lookupSchema(ref.id);
+      const inner = lookupSchema(ref.id, schemas);
       if (!inner) return `<${ref.id}>`;
-      return synthesizeExample(ref.id, depth + 1);
+      return synthesizeExample(ref.id, schemas, depth + 1);
     }
     case TypeKind.ARRAY:
       return [
-        placeholderFor((type as ArrayType).elementType, propName, depth + 1),
+        placeholderFor(
+          (type as ArrayType).elementType,
+          propName,
+          depth + 1,
+          schemas,
+        ),
       ];
   }
 }
@@ -210,6 +230,7 @@ export interface ResponseExample {
  */
 export function collectResponseExamples(
   op: Operation,
+  schemas: NamedCollection<Schema> | Record<string, Schema>,
 ): readonly ResponseExample[] {
   return collectResponses(op).map((entry) => {
     const schemaName = entry.schemaName;
@@ -217,7 +238,7 @@ export function collectResponseExamples(
       id: `${op.id}:${entry.status}`,
       name: `${entry.status} ${describeFamily(entry.family)}`,
       description: entry.response.description,
-      body: schemaName ? synthesizeExample(schemaName) : null,
+      body: schemaName ? synthesizeExample(schemaName, schemas) : null,
       headers: exampleHeadersFor(entry),
     };
   });

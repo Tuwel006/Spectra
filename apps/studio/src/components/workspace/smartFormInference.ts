@@ -10,8 +10,6 @@ import type {
 } from "@spectra/core";
 import { PrimitiveTypeName, TypeKind } from "@spectra/core";
 
-import { mockDocumentation } from "@/mock/documentation";
-
 /* ------------------------------------------------------------------ */
 /* Type inference                                                      */
 /* ------------------------------------------------------------------ */
@@ -174,12 +172,18 @@ export function buildInitialValue(
 }
 
 /**
- * Default reference resolver — walks the bundled mock documentation.
- * The SmartForm is decoupled from the mock module, so consumers can
- * pass a different resolver if they swap in a real provider.
+ * Default reference resolver — returns `undefined` so callers must
+ * supply a real resolver against the active documentation.
+ *
+ * <p>Each consumer ({@link SmartForm}, {@link RequestBody},
+ * {@link JsonSchemaPanel}) builds its own resolver from
+ * {@link useDocumentationContext}, e.g.
+ * <code>(id) =&gt; documentation?.components.schemas[id]</code>. This
+ * keeps the helper decoupled from any single data source and pushes
+ * the resolution decision into the React tree.</p>
  */
 export function defaultResolveReference(id: string): Schema | undefined {
-  return mockDocumentation.components.schemas[id];
+  return undefined;
 }
 
 /* ------------------------------------------------------------------ */

@@ -4,6 +4,8 @@ import * as React from "react";
 
 import type { Operation } from "@spectra/core";
 
+import { useDocumentationContext } from "@/lib/documentationContext";
+
 import type { WorkspaceTab } from "../types/Workspace";
 import { resolveOperation, useWorkspaceStore } from "../store/workspaceStore";
 
@@ -103,11 +105,13 @@ export interface UseResolvedWorkspaceTabResult {
 }
 
 /**
- * Resolve the active workspace tab against the mock documentation.
+ * Resolve the active workspace tab against the loaded documentation.
  *
  * The tab itself is what the store tracks; the resolver reaches into
- * the bundled `mockDocumentation` to attach the live `Operation` (and
- * later `Schema` / `Response` / …) so view components don't have to.
+ * the active {@link Documentation} (from
+ * {@link useDocumentationContext}) to attach the live `Operation`
+ * (and later `Schema` / `Response` / …) so view components don't
+ * have to.
  *
  * Returns `isReady: false` during SSR / first paint to gate any UI
  * that would otherwise hydration-mismatch.
@@ -118,11 +122,13 @@ export function useResolvedWorkspaceTab(
   const activeTab = useWorkspaceStore((s) =>
     s.tabs.find((t) => t.id === s.activeTabId) ?? null,
   );
+  const { documentation } = useDocumentationContext();
 
   const operation = React.useMemo<Operation | undefined>(() => {
     if (!activeTab || activeTab.resourceType !== "endpoint") return undefined;
-    return resolveOperation(activeTab.resourceId);
-  }, [activeTab]);
+    if (!documentation) return undefined;
+    return resolveOperation(documentation, activeTab.resourceId);
+  }, [activeTab, documentation]);
 
   return React.useMemo(
     () => ({

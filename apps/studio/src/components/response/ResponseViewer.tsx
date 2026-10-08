@@ -3,6 +3,8 @@
 import * as React from "react";
 import type { Operation } from "@spectra/core";
 
+import { useDocumentationContext } from "@/lib/documentationContext";
+
 import { ResponseBody } from "./ResponseBody";
 import { ResponseCookies } from "./ResponseCookies";
 import { ResponseEmpty } from "./ResponseEmpty";
@@ -47,6 +49,8 @@ export function ResponseViewer({
 }): React.ReactElement {
   const mounted = useResponseMounted();
   const endpointId = operation.id;
+  const { documentation } = useDocumentationContext();
+  const schemas = documentation?.components.schemas ?? {};
 
   // Documented responses — computed once per operation.
   const responses = React.useMemo<readonly ResponseEntry[]>(
@@ -54,8 +58,8 @@ export function ResponseViewer({
     [operation],
   );
   const examples = React.useMemo<readonly ResponseExample[]>(
-    () => collectResponseExamples(operation),
-    [operation],
+    () => collectResponseExamples(operation, schemas),
+    [operation, schemas],
   );
 
   // Default status: first success, otherwise first entry.

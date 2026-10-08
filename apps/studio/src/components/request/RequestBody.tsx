@@ -5,6 +5,7 @@ import { Braces } from "lucide-react";
 import type { Operation } from "@spectra/core";
 
 import { cn } from "@/lib/cn";
+import { useDocumentationContext } from "@/lib/documentationContext";
 import { useRequestDraftStore } from "./request.store";
 import {
   BODY_TYPE_CONTENT_TYPE,
@@ -24,10 +25,10 @@ import { BinaryUpload } from "./BinaryUpload";
 import { SmartForm } from "@/components/workspace/SmartForm";
 import {
   buildInitialValue,
-  defaultResolveReference,
   parseJsonSafe,
   stringifyJsonSafe,
 } from "@/components/workspace/smartFormInference";
+import type { Schema } from "@spectra/core";
 
 /**
  * Body editor — dispatches to the right editor for the selected
@@ -170,13 +171,17 @@ function SmartFormSlot({
   operation?: Operation;
 }): React.ReactElement {
   const patch = useRequestDraftStore((s) => s.patchDraft);
+  const { documentation } = useDocumentationContext();
+  const schemas = documentation?.components.schemas;
+  const resolveReference = React.useCallback(
+    (id: string): Schema | undefined => schemas?.[id],
+    [schemas],
+  );
   const schema = React.useMemo(() => {
-    if (!operation) return undefined;
+    if (!operation || !schemas) return undefined;
     const hints = collectParamHints(operation);
-    return hints.bodySchemaId
-      ? defaultResolveReference(hints.bodySchemaId)
-      : undefined;
-  }, [operation]);
+    return hints.bodySchemaId ? schemas[hints.bodySchemaId] : undefined;
+  }, [operation, schemas]);
 
   if (!schema) {
     return (
@@ -191,8 +196,8 @@ function SmartFormSlot({
   }
 
   const value = React.useMemo(
-    () => parseJsonSafe(text) ?? buildInitialValue(schema, defaultResolveReference),
-    [text, schema],
+    () => parseJsonSafe(text) ?? buildInitialValue(schema, resolveReference),
+    [text, schema, resolveReference],
   );
 
   return (
@@ -202,7 +207,7 @@ function SmartFormSlot({
           schema={schema}
           value={value}
           onChange={(next) => patch(endpointId, "bodyText", stringifyJsonSafe(next))}
-          resolveReference={defaultResolveReference}
+          resolveReference={resolveReference}
         />
       </div>
       <details className="border-t border-border bg-bg-subtle px-4 py-2 text-[11px] text-text-muted">
@@ -237,17 +242,27 @@ function JsonBodySlot({
   operation?: Operation;
 }): React.ReactElement {
   const patch = useRequestDraftStore((s) => s.patchDraft);
+  const { documentation } = useDocumentationContext();
+  const schemas = documentation?.components.schemas;
+  const resolveReference = React.useCallback(
+    (id: string): Schema | undefined => schemas?.[id],
+    [schemas],
+  );
   const schema = React.useMemo(() => {
-    if (!operation) return undefined;
+    if (!operation || !schemas) return undefined;
     const hints = collectParamHints(operation);
-    return hints.bodySchemaId
-      ? defaultResolveReference(hints.bodySchemaId)
-      : undefined;
-  }, [operation]);
+    return hints.bodySchemaId ? schemas[hints.bodySchemaId] : undefined;
+  }, [operation, schemas]);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-2">
-      {schema ? <JsonSchemaPanel schema={schema} defaultOpen={false} /> : null}
+      {schema ? (
+        <JsonSchemaPanel
+          schema={schema}
+          defaultOpen={false}
+          resolveReference={resolveReference}
+        />
+      ) : null}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <JsonEditor
           value={text}

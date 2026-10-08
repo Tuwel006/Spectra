@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 
+import { DocumentationProvider } from "@/lib/documentationContext";
+
 import { ThemeProvider } from "./theme-provider";
 
 /**
@@ -13,5 +15,9 @@ import { ThemeProvider } from "./theme-provider";
  * concern, then store providers, then feature contexts).
  */
 export function AppProviders({ children }: { children: ReactNode }) {
-  return <ThemeProvider>{children}</ThemeProvider>;
+  return (
+    <DocumentationProvider>
+      <ThemeProvider>{children}</ThemeProvider>
+    </DocumentationProvider>
+  );
 }

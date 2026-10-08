@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { cn } from "@/lib/cn";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useDocumentationContext } from "@/lib/documentationContext";
 
 import { ExplorerEmpty } from "./ExplorerEmpty";
 import { ExplorerFooter } from "./ExplorerFooter";
@@ -23,19 +24,66 @@ import type { ExplorerProps } from "./types/ExplorerState";
  *   • `useExplorer`       — query, expanded sections, folder toggles
  *   • `useExplorerSearch` — applies the live filter to the tree
  *
- * Splitting them keeps the tree component free of search logic and
- * lets future contributors plug in debounced / fuzzy search without
- * touching the surrounding UI.
+ * <p><strong>Loading-state architecture.</strong> The active
+ * documentation arrives asynchronously from <code>document.bin</code>.
+ * While it is still loading we cannot call <code>useExplorer</code>
+ * (it requires a real <code>Documentation</code>), so we render a
+ * static shell instead. To stay inside the Rules of Hooks the
+ * hookful component is split out into {@link ExplorerContent} and
+ * mounted/unmounted by a single conditional render — the hook count
+ * of <code>ExplorerContent</code> never changes between its own
+ * renders.</p>
  */
 export function Explorer({
-  documentation,
+  documentation: documentationProp,
   onEndpointSelect,
   headerActions,
   className,
 }: ExplorerProps): React.ReactElement {
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
+  // Fall back to the active documentation from context when the host
+  // doesn't pass one (the typical case in production — only tests
+  // supply an explicit `documentation` override).
+  const { documentation: contextDoc } = useDocumentationContext();
+  const documentation = documentationProp ?? contextDoc;
 
+  // Single conditional render — once ExplorerContent mounts, its
+  // hook count is stable across re-renders.
+  if (!documentation) {
+    return (
+      <ExplorerShell className={className}>
+        <ExplorerHeader title="APIs" endpointCount={0} actions={headerActions} />
+        <ExplorerSearch value="" onChange={() => undefined} />
+        <div className="flex flex-1 items-center justify-center px-4">
+          <ExplorerEmpty />
+        </div>
+        <ExplorerFooter endpointCount={0} pathCount={0} />
+      </ExplorerShell>
+    );
+  }
+
+  return (
+    <ExplorerContent
+      documentation={documentation}
+      onEndpointSelect={onEndpointSelect}
+      headerActions={headerActions}
+      className={className}
+    />
+  );
+}
+
+/**
+ * Inner explorer — assumes `documentation` is defined. Always calls
+ * the same hooks in the same order, so the Rules of Hooks hold even
+ * when the parent's `documentation` flips between undefined and a
+ * real value (which would otherwise throw React error #310).
+ */
+function ExplorerContent({
+  documentation,
+  onEndpointSelect,
+  headerActions,
+  className,
+}: Required<Pick<ExplorerProps, "documentation">> &
+  Omit<ExplorerProps, "documentation">): React.ReactElement {
   const state = useExplorer(documentation);
   const search = useExplorerSearch(state.tree, state.query);
 
@@ -51,21 +99,6 @@ export function Explorer({
     },
     [state, onEndpointSelect],
   );
-
-  // On the very first paint (SSR or hydration) we render a static
-  // shell identical to the one before the state hook attaches.
-  if (!mounted) {
-    return (
-      <ExplorerShell className={className}>
-        <ExplorerHeader title="APIs" endpointCount={0} actions={headerActions} />
-        <ExplorerSearch value="" onChange={() => undefined} />
-        <div className="flex flex-1 items-center justify-center px-4">
-          <ExplorerEmpty />
-        </div>
-        <ExplorerFooter endpointCount={0} pathCount={0} />
-      </ExplorerShell>
-    );
-  }
 
   return (
     <ExplorerShell className={className}>

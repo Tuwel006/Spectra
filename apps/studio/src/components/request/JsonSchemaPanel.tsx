@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
+import { useDocumentationContext } from "@/lib/documentationContext";
 import type { ArrayType, Property, ReferenceType, Schema, Type } from "@spectra/core";
 import { TypeKind } from "@spectra/core";
 
@@ -40,13 +41,23 @@ import {
  */
 export function JsonSchemaPanel({
   schema,
-  resolveReference = defaultResolveReference,
+  resolveReference: resolveReferenceProp,
   defaultOpen = true,
 }: {
   schema: Schema;
   resolveReference?: (id: string) => Schema | undefined;
   defaultOpen?: boolean;
 }): React.ReactElement {
+  const { documentation } = useDocumentationContext();
+  const schemas = documentation?.components.schemas;
+  const resolveReference = React.useCallback(
+    (id: string): Schema | undefined => {
+      if (schemas) return schemas[id];
+      if (resolveReferenceProp) return resolveReferenceProp(id);
+      return defaultResolveReference(id);
+    },
+    [schemas, resolveReferenceProp],
+  );
   const [open, setOpen] = React.useState(defaultOpen);
   const properties = React.useMemo(
     () => Object.values(schema.properties),

@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { useDocumentationContext } from "@/lib/documentationContext";
+
 import { useResolvedWorkspaceTab } from "./hooks/useWorkspace";
 import { EndpointWorkspace } from "./EndpointWorkspace";
 import { useHasMounted, useWorkspaceStore } from "./store/workspaceStore";
@@ -24,6 +26,7 @@ import type { Operation } from "@spectra/core";
 export function WorkspaceContent(): React.ReactElement {
   const mounted = useHasMounted();
   const { tab, operation, isReady } = useResolvedWorkspaceTab(mounted);
+  const { documentation } = useDocumentationContext();
 
   // No active tab resolved — fall back to the first available
   // endpoint tab so the body always shows content when tabs exist.
@@ -42,7 +45,9 @@ export function WorkspaceContent(): React.ReactElement {
 
   // Resolve the operation for the effective tab (may be the fallback).
   const resolvedOp: Operation | undefined =
-    operation ?? resolveOperation(effectiveTab.resourceId);
+    documentation && !operation
+      ? resolveOperation(documentation, effectiveTab.resourceId)
+      : operation;
 
   if (!isReady || !resolvedOp) {
     return <EndpointWorkspaceSkeleton />;

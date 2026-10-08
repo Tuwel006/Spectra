@@ -33,3 +33,6 @@ dist/
 
 # vercel
 .vercel
+
+# spectra - generated artifacts (CLI writes here at build time)
+.spectra/

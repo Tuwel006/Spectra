@@ -5,6 +5,7 @@ import { Box, ChevronDown, ChevronRight, Link2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
+import { useDocumentationContext } from "@/lib/documentationContext";
 
 import {
   PrimitiveTypeName,
@@ -32,7 +33,9 @@ export function ResponseSchema({
   schemaName: string;
   visited?: ReadonlySet<string>;
 }): React.ReactElement {
-  const schema = lookupSchema(schemaName);
+  const { documentation } = useDocumentationContext();
+  const schemas = documentation?.components.schemas ?? {};
+  const schema = lookupSchema(schemaName, schemas);
   if (!schema) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-xs italic text-text-muted">
@@ -60,6 +63,7 @@ export function ResponseSchema({
               name={propName}
               prop={prop}
               visited={new Set(visitedSafe).add(schema.id)}
+              schemas={schemas}
             />
           ))}
         </ul>
@@ -102,10 +106,12 @@ function SchemaPropertyRow({
   name,
   prop,
   visited,
+  schemas,
 }: {
   name: string;
   prop: Property;
   visited: ReadonlySet<string>;
+  schemas: Record<string, Schema>;
 }): React.ReactElement {
   const [open, setOpen] = React.useState(true);
   const expand = isExpandable(prop.valueType as PrimitiveType | ReferenceType | ArrayType, visited);
@@ -169,6 +175,7 @@ function SchemaPropertyRow({
           <TypeDrilldown
             type={prop.valueType as PrimitiveType | ReferenceType | ArrayType}
             visited={visited}
+            schemas={schemas}
           />
         </div>
       ) : null}
@@ -219,9 +226,11 @@ function isExpandable(
 function TypeDrilldown({
   type,
   visited,
+  schemas,
 }: {
   type: PrimitiveType | ReferenceType | ArrayType;
   visited: ReadonlySet<string>;
+  schemas: Record<string, Schema>;
 }): React.ReactElement {
   if (type.kind === TypeKind.PRIMITIVE) {
     return (
@@ -240,13 +249,14 @@ function TypeDrilldown({
         <TypeDrilldown
           type={type.elementType as PrimitiveType | ReferenceType | ArrayType}
           visited={visited}
+          schemas={schemas}
         />
       </div>
     );
   }
 
   // Reference: render full schema (recursive).
-  const inner = lookupSchema(type.reference.id);
+  const inner = lookupSchema(type.reference.id, schemas);
   if (!inner) {
     return (
       <div className="flex items-center gap-1 text-[11px] italic text-text-muted">
@@ -281,6 +291,7 @@ function TypeDrilldown({
             name={propName}
             prop={prop}
             visited={new Set(visited).add(type.reference.id)}
+            schemas={schemas}
           />
         ))}
       </ul>

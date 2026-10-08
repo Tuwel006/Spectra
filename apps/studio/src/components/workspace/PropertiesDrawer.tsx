@@ -14,8 +14,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
-import { mockDocumentation } from "@/mock/documentation";
-import type { Operation, Schema } from "@spectra/core";
+import { useDocumentationContext } from "@/lib/documentationContext";
+import type { Documentation, Operation, Schema } from "@spectra/core";
 
 import { readOperationTagsAndAuth } from "./EndpointOverview";
 
@@ -197,9 +197,11 @@ function PropertiesPanel({
 }: {
   operation: Operation;
 }): React.ReactElement {
+  const { documentation } = useDocumentationContext();
+  const info = documentation?.info;
   const props = React.useMemo(
-    () => collectProperties(operation),
-    [operation],
+    () => (info ? collectProperties(operation, info) : []),
+    [operation, info],
   );
   return (
     <section
@@ -298,16 +300,22 @@ interface PropRow {
 }
 
 /**
- * Walk the operation + the bundled `Info` block and surface a flat
- * list of (key, value) rows for the right-hand drawer. Values that
- * are nested objects are flattened to their string form.
+ * Walk the operation + the documentation's `Info` block and surface
+ * a flat list of (key, value) rows for the right-hand drawer. Values
+ * that are nested objects are flattened to their string form.
+ *
+ * <p>The `Info` block is passed in (rather than read from a module
+ * constant) so this helper stays a pure function and stays correct
+ * when the documentation reloads.</p>
  *
  * Keys are namespaced so the Info and Operation blocks never collide
  * (both have a `description` / `version` field).
  */
-function collectProperties(operation: Operation): readonly PropRow[] {
+function collectProperties(
+  operation: Operation,
+  info: Documentation["info"],
+): readonly PropRow[] {
   const rows: PropRow[] = [];
-  const info = mockDocumentation.info;
   const push = (
     namespace: "api" | "operation",
     key: string,

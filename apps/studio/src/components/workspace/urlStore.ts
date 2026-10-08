@@ -4,16 +4,16 @@ import * as React from "react";
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
-import { mockDocumentation } from "@/mock/documentation";
+import type { Server } from "@spectra/core";
 
 /**
  * Workspace-level URL state.
  *
  * <p>The endpoint header URL bar is built from three parts:</p>
- *   1. **Server** — either a server picked from
- *      `mockDocumentation.servers` (production / staging / mock) OR a
- *      free-form custom URL entered by the user. Picked-server wins
- *      unless the user types a custom one.
+ *   1. **Server** — either a server picked from the active
+ *      documentation's `servers` collection (production / staging /
+ *      mock) OR a free-form custom URL entered by the user.
+ *      Picked-server wins unless the user types a custom one.
  *   2. **Path**   — the path-template with `{var}` substitutions,
  *      edited via the path-param table.
  *   3. **Query**  — the query string, edited via the query-param table.
@@ -82,8 +82,15 @@ export const useUrlStore = create<UrlState>()(
  *   - custom URL wins when set (non-empty)
  *   - otherwise the selected server from the docs
  *   - otherwise the first server in the docs
+ *
+ * <p>The server list is passed in (rather than read from a module
+ * constant) so the URL bar can react to doc reloads — each render
+ * with a fresh {@link Server} array rebuilds the resolution.</p>
  */
-export function resolveActiveServerUrl(state: UrlState): {
+export function resolveActiveServerUrl(
+    state: UrlState,
+    servers: readonly Server[],
+): {
     readonly url: string;
     readonly isCustom: boolean;
     readonly serverId: string | undefined;
@@ -91,9 +98,9 @@ export function resolveActiveServerUrl(state: UrlState): {
     if (state.customServerUrl && state.customServerUrl.length > 0) {
         return { url: state.customServerUrl, isCustom: true, serverId: undefined };
     }
-    const id = state.selectedServerId ?? mockDocumentation.servers[0]?.id;
-    const server = mockDocumentation.servers.find((s) => s.id === id);
-    const fallback = mockDocumentation.servers[0]?.url ?? "";
+    const id = state.selectedServerId ?? servers[0]?.id;
+    const server = servers.find((s) => s.id === id);
+    const fallback = servers[0]?.url ?? "";
     return {
         url: server?.url ?? fallback,
         isCustom: false,

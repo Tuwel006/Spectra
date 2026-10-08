@@ -51,7 +51,6 @@ export { useExplorerSearch } from "./hooks/useExplorerSearch";
 export type { UseExplorerOptions } from "./hooks/useExplorer";
 
 export {
-  DEFAULT_DOCUMENTATION,
   buildExplorerTree,
   flattenEndpoints,
   groupByTag,

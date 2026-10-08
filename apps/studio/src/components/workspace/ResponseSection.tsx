@@ -9,6 +9,7 @@ import {
   type ResponseExample,
 } from "@/components/response";
 import { useResponseSlice, useResponseViewerStore } from "@/components/response";
+import { useDocumentationContext } from "@/lib/documentationContext";
 import type { Operation } from "@spectra/core";
 
 import { useWorkspaceStore } from "./store/workspaceStore";
@@ -47,6 +48,8 @@ export function ResponseSection({
   operation: Operation;
 }): React.ReactElement {
   const endpointId = operation.id;
+  const { documentation } = useDocumentationContext();
+  const schemas = documentation?.components.schemas ?? {};
 
   // Documented responses + synthesized examples — computed once per
   // operation. The examples carry status code, family, description,
@@ -56,8 +59,8 @@ export function ResponseSection({
     [operation],
   );
   const examples = React.useMemo<readonly ResponseExample[]>(
-    () => collectResponseExamples(operation),
-    [operation],
+    () => collectResponseExamples(operation, schemas),
+    [operation, schemas],
   );
 
   const slice = useResponseSlice(endpointId);
