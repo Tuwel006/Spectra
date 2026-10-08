@@ -22,6 +22,7 @@
     "dev": "node scripts/bundle.mjs --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:e2e": "tsx scripts/test-e2e.mts",
     "prebuild": "pnpm --filter studio --filter studio... --if-present build"
   },
   "dependencies": {

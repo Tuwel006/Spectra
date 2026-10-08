@@ -272,6 +272,12 @@ importers:
       '@nestjs/platform-express':
         specifier: ^11.0.1
         version: 11.1.28(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28)
+      '@nestjs/serve-static':
+        specifier: ^5.0.0
+        version: 5.0.5(@nestjs/common@11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28)(express@5.2.1)
+      '@spectra/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2

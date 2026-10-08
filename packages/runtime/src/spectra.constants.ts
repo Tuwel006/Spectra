@@ -24,9 +24,18 @@ export const SPECTRA_STATIC_FILES_LOADER =
  */
 export const spectraProviders = (
     projectRoot: string,
+    endpoint?: string,
 ): Provider[] => [
     {
         provide: SPECTRA_PROJECT_ROOT,
         useValue: projectRoot,
     },
+    ...(typeof endpoint === "string"
+        ? [
+              {
+                  provide: "SPECTRA_ENDPOINT",
+                  useValue: endpoint,
+              },
+          ]
+        : []),
 ];

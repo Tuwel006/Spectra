@@ -54,6 +54,7 @@
     "test:nest:unified": "tsx packages/provider-nestjs/test/unified-semantic-model.test.ts",
     "test:nest:g0-config": "tsx packages/provider-nestjs/test/g0-config.test.ts",
     "test:nest:documentation": "tsx packages/provider-nestjs/test/documentation-integration.test.ts",
+    "test:spectra:e2e": "pnpm --filter @spectra/cli test:e2e",
     "test:nest:project-inspector": "tsx packages/provider-ast/test/project-inspector.test.ts",
     "test:ast:expression": "tsx packages/provider-ast/test/expression.test.ts",
     "test:nest:symbol": "tsx packages/provider-nestjs/test/symbol.test.ts",
